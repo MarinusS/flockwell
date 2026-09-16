@@ -1,3 +1,4 @@
+use std::path::PathBuf;
 use std::process::ExitCode;
 
 use flockwell_audit::{Animal, audit_animals};
@@ -8,11 +9,19 @@ struct AnimalInput {
     tag: Option<String>,
 }
 
-fn main() -> std::process::ExitCode {
-    let animals_json = match std::fs::read_to_string("animals.json") {
+fn main() -> ExitCode {
+    let input_path = match std::env::args_os().nth(1) {
+        Some(path) => PathBuf::from(path),
+        None => {
+            eprintln!("Usage: flockwell-audit <animals.json>");
+            return ExitCode::from(2);
+        }
+    };
+
+    let animals_json = match std::fs::read_to_string(&input_path) {
         Ok(content) => content,
         Err(err) => {
-            eprintln!("Could not read animals.json: {err}");
+            eprintln!("Could not read {}: {err}", input_path.display());
             return ExitCode::from(2);
         }
     };
@@ -20,7 +29,7 @@ fn main() -> std::process::ExitCode {
     let animal_inputs = match serde_json::from_str::<Vec<AnimalInput>>(&animals_json) {
         Ok(animals) => animals,
         Err(err) => {
-            eprintln!("Invalid json in animals.json: {err}");
+            eprintln!("Invalid JSON in {}: {err}", input_path.display());
             return ExitCode::from(2);
         }
     };
@@ -29,7 +38,7 @@ fn main() -> std::process::ExitCode {
 
     let animals: Vec<Animal> = animal_inputs
         .into_iter()
-        .map(|animal_input| Animal::new(&animal_input.id, animal_input.tag.as_deref()))
+        .map(|input| Animal::new(&input.id, input.tag.as_deref()))
         .collect();
 
     let audit = audit_animals(&animals);
