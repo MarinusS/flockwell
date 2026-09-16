@@ -1,30 +1,43 @@
+use std::process::ExitCode;
+
 use flockwell_audit::{Animal, audit_animals};
 
-fn main() {
-    let animals = vec![
-        Animal::new(
-            "01a0a92d-bb64-72db-a508-760942ff20dd",
-            Some("250029228126084"),
-        ),
-        Animal::new(
-            "01a0a92e-9028-76af-8b41-d3a4e9d05a59",
-            Some("250029228126084"),
-        ),
-        Animal::new(
-            "01a0a940-f174-745c-a77c-0104bcbd769c",
-            Some("250029228125072"),
-        ),
-        Animal::new("01a0a941-f926-774e-9d98-7876de45ae1c", None),
-        Animal::new("01a0a941-f926-774e-9d98-7d2043c0632f", None),
-    ];
+#[derive(serde::Deserialize)]
+struct AnimalInput {
+    id: String,
+    tag: Option<String>,
+}
 
-    println!("{animals:#?}");
-    println!();
+fn main() -> std::process::ExitCode {
+    let animals_json = match std::fs::read_to_string("animals.json") {
+        Ok(content) => content,
+        Err(err) => {
+            eprintln!("Could not read animals.json: {err}");
+            return ExitCode::from(2);
+        }
+    };
+
+    let animal_inputs = match serde_json::from_str::<Vec<AnimalInput>>(&animals_json) {
+        Ok(animals) => animals,
+        Err(err) => {
+            eprintln!("Invalid json in animals.json: {err}");
+            return ExitCode::from(2);
+        }
+    };
+
+    println!("Read {} animals", animal_inputs.len());
+
+    let animals: Vec<Animal> = animal_inputs
+        .into_iter()
+        .map(|animal_input| Animal::new(&animal_input.id, animal_input.tag.as_deref()))
+        .collect();
 
     let audit = audit_animals(&animals);
     if audit.has_errors() {
         println!("{audit:#?}");
+        ExitCode::from(1)
     } else {
-        println!("Audit passed")
+        println!("Audit passed");
+        ExitCode::SUCCESS
     }
 }
