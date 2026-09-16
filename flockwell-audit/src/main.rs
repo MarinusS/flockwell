@@ -1,21 +1,10 @@
-use std::error::Error;
-use std::path::{Path, PathBuf};
+mod json_input;
+
+use std::path::PathBuf;
 use std::process::ExitCode;
 
-use flockwell_audit::{Animal, audit_animals};
-
-#[derive(serde::Deserialize)]
-struct AnimalInput {
-    id: String,
-    tag: Option<String>,
-}
-
-fn load_animals(path: &Path) -> Result<Vec<AnimalInput>, Box<dyn Error>> {
-    let json = std::fs::read_to_string(path)?;
-    let animals = serde_json::from_str(&json)?;
-
-    Ok(animals)
-}
+use flockwell_audit::audit_animals;
+use json_input::load_animals;
 
 fn main() -> ExitCode {
     let input_path = match std::env::args_os().nth(1) {
@@ -26,7 +15,7 @@ fn main() -> ExitCode {
         }
     };
 
-    let animal_inputs = match load_animals(&input_path) {
+    let animals = match load_animals(&input_path) {
         Ok(animals) => animals,
         Err(err) => {
             eprintln!("Could not load {}: {err}", input_path.display());
@@ -34,12 +23,7 @@ fn main() -> ExitCode {
         }
     };
 
-    println!("Read {} animals", animal_inputs.len());
-
-    let animals: Vec<Animal> = animal_inputs
-        .into_iter()
-        .map(|input| Animal::new(&input.id, input.tag.as_deref()))
-        .collect();
+    println!("Read {} animals", animals.len());
 
     let audit = audit_animals(&animals);
 
