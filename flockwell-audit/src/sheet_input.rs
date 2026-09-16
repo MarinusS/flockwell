@@ -31,6 +31,12 @@ struct AnimalColumns {
     tag: usize,
 }
 
+#[derive(Debug, PartialEq, Eq)]
+struct ParsedAnimals {
+    animals: Vec<Animal>,
+    row_errors: Vec<LocatedRowError>,
+}
+
 fn require_single_column(column_name: &str, indices: Vec<usize>) -> Result<usize, HeaderError> {
     match indices.as_slice() {
         [] => Err(HeaderError::MissingColumn {
@@ -82,6 +88,28 @@ fn parse_animal_row(row: &[&str], columns: &AnimalColumns) -> Result<Animal, Row
         .filter(|value| !value.is_empty());
 
     Ok(Animal::new(id, tag))
+}
+
+fn parse_animal_rows(rows: &[&[&str]]) -> Result<ParsedAnimals, Vec<HeaderError>> {
+    let headers = rows.first().copied().unwrap_or(&[]);
+    let columns = find_animal_columns(headers)?;
+
+    let mut animals = Vec::new();
+    let mut errors = Vec::new();
+
+    for (index, row) in rows.iter().enumerate().skip(1) {
+        let row_number = index + 1;
+
+        match parse_animal_row(row, &columns) {
+            Ok(animal) => animals.push(animal),
+            Err(error) => errors.push(LocatedRowError { row_number, error }),
+        }
+    }
+
+    Ok(ParsedAnimals {
+        animals,
+        row_errors: errors,
+    })
 }
 
 #[cfg(test)]
@@ -308,6 +336,127 @@ mod tests {
         assert_eq!(
             parse_animal_row(&row, &columns),
             Ok(Animal::new("animal-1", Some("00042"))),
+        );
+    }
+    #[test]
+    fn empty_sheet_reports_missing_headers() {
+        assert_eq!(
+            parse_animal_rows(&[]),
+            Err(vec![
+                HeaderError::MissingColumn {
+                    column_name: ANIMAL_ID_HEADER.to_string(),
+                },
+                HeaderError::MissingColumn {
+                    column_name: ANIMAL_TAG_HEADER.to_string(),
+                },
+            ]),
+        );
+    }
+
+    #[test]
+    fn headers_only_produce_no_animals_or_row_errors() {
+        let rows: &[&[&str]] = &[&["UUID_v7", "Tag"]];
+
+        assert_eq!(
+            parse_animal_rows(rows),
+            Ok(ParsedAnimals {
+                animals: vec![],
+                row_errors: vec![],
+            })
+        );
+    }
+
+    #[test]
+    fn parses_data_rows_without_treating_headers_as_an_animal() {
+        let rows: &[&[&str]] = &[
+            &["UUID_v7", "Tag"],
+            &["animal-1", "00042"],
+            &["animal-2", "00099"],
+        ];
+
+        let expected_animals = vec![
+            Animal::new("animal-1", Some("00042")),
+            Animal::new("animal-2", Some("00099")),
+        ];
+
+        assert_eq!(
+            parse_animal_rows(rows),
+            Ok(ParsedAnimals {
+                animals: expected_animals,
+                row_errors: vec![],
+            }),
+        );
+    }
+
+    #[test]
+    fn retains_valid_animals_and_reports_invalid_row_location() {
+        let rows: &[&[&str]] = &[
+            &["UUID_v7", "Tag"],
+            &["animal-1", "00042"],
+            &["", "00099"],
+            &["animal-2", "00100"],
+        ];
+
+        let expected_animals = vec![
+            Animal::new("animal-1", Some("00042")),
+            Animal::new("animal-2", Some("00100")),
+        ];
+
+        let expected_errors = vec![LocatedRowError {
+            row_number: 3,
+            error: RowError::MissingAnimalId,
+        }];
+
+        assert_eq!(
+            parse_animal_rows(rows),
+            Ok(ParsedAnimals {
+                animals: expected_animals,
+                row_errors: expected_errors,
+            }),
+        );
+    }
+
+    #[test]
+    fn collects_multiple_row_errors_without_stopping_early() {
+        let rows: &[&[&str]] = &[
+            &["UUID_v7", "Tag"],
+            &["", "00042"],
+            &["animal-1", "00099"],
+            &["   ", "00100"],
+        ];
+
+        let expected_animals = vec![Animal::new("animal-1", Some("00099"))];
+
+        let expected_errors = vec![
+            LocatedRowError {
+                row_number: 2,
+                error: RowError::MissingAnimalId,
+            },
+            LocatedRowError {
+                row_number: 4,
+                error: RowError::MissingAnimalId,
+            },
+        ];
+
+        assert_eq!(
+            parse_animal_rows(rows),
+            Ok(ParsedAnimals {
+                animals: expected_animals,
+                row_errors: expected_errors,
+            }),
+        );
+    }
+
+    #[test]
+    fn invalid_headers_prevent_row_parsing() {
+        let rows: &[&[&str]] = &[&["UUID_v7", "Tag", "TAG"], &["animal-1", "00042", "00099"]];
+
+        assert_eq!(
+            parse_animal_rows(rows),
+            Err(vec![HeaderError::DuplicateColumn {
+                column_name: ANIMAL_TAG_HEADER.to_string(),
+                indices: vec![1, 2],
+            }]),
         );
     }
 }
