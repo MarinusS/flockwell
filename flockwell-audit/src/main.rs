@@ -1,4 +1,5 @@
-use std::path::PathBuf;
+use std::error::Error;
+use std::path::{Path, PathBuf};
 use std::process::ExitCode;
 
 use flockwell_audit::{Animal, audit_animals};
@@ -7,6 +8,13 @@ use flockwell_audit::{Animal, audit_animals};
 struct AnimalInput {
     id: String,
     tag: Option<String>,
+}
+
+fn load_animals(path: &Path) -> Result<Vec<AnimalInput>, Box<dyn Error>> {
+    let json = std::fs::read_to_string(path)?;
+    let animals = serde_json::from_str(&json)?;
+
+    Ok(animals)
 }
 
 fn main() -> ExitCode {
@@ -18,18 +26,10 @@ fn main() -> ExitCode {
         }
     };
 
-    let animals_json = match std::fs::read_to_string(&input_path) {
-        Ok(content) => content,
-        Err(err) => {
-            eprintln!("Could not read {}: {err}", input_path.display());
-            return ExitCode::from(2);
-        }
-    };
-
-    let animal_inputs = match serde_json::from_str::<Vec<AnimalInput>>(&animals_json) {
+    let animal_inputs = match load_animals(&input_path) {
         Ok(animals) => animals,
         Err(err) => {
-            eprintln!("Invalid JSON in {}: {err}", input_path.display());
+            eprintln!("Could not load {}: {err}", input_path.display());
             return ExitCode::from(2);
         }
     };
@@ -42,6 +42,7 @@ fn main() -> ExitCode {
         .collect();
 
     let audit = audit_animals(&animals);
+
     if audit.has_errors() {
         println!("{audit:#?}");
         ExitCode::from(1)
