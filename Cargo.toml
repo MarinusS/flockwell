@@ -1,0 +1,4 @@
+[workspace]
+members = ["flockwell-audit"]
+
+resolver = "2"
