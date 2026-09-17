@@ -34,11 +34,16 @@ async fn main() -> ExitCode {
             println!("Parsed animals: {animals:#?}");
             animals
         }
-        Err(_err) => {
-            println!("Could parse animals because of header errors: ");
+        Err(errors) => {
+            eprintln!("Could not parse sheet headers: {errors:#?}");
             return ExitCode::from(2);
         }
     };
+
+    let has_row_errors = !parsed.row_errors.is_empty();
+    if has_row_errors {
+        eprintln!("Rejected sheet rows: {:#?}", parsed.row_errors);
+    }
 
     println!("Read {} animals", parsed.animals.len());
 
@@ -46,6 +51,12 @@ async fn main() -> ExitCode {
 
     if audit.has_errors() {
         println!("{audit:#?}");
+    }
+
+    if has_row_errors {
+        eprintln!("Audit incomplete: some sheet rows could not be parsed.");
+        ExitCode::from(2)
+    } else if audit.has_errors() {
         ExitCode::from(1)
     } else {
         println!("Audit passed");
