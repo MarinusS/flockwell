@@ -5,4 +5,3 @@ pub use animal::AnimalId;
 pub use animal::AnimalIdParseError;
 pub use animal::DispositionId;
 pub use animal::LambingId;
-pub use animal::Sex;
