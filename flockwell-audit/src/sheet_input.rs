@@ -1,37 +1,43 @@
-use std::collections::HashMap;
 use std::str::FromStr;
 
 use flockwell_domain::{Animal, AnimalId, DispositionId, LambingId, LifeStage, Sex};
 
-const ANIMAL_ID_HEADER: &str = "uuid_v7";
-const ANIMAL_TAG_HEADER: &str = "tag";
-const ANIMAL_TIP_TAG_HEADER: &str = "tip tag";
-const ANIMAL_UHF_TAG_HEADER: &str = "uhf tag";
-const ANIMAL_UHF_TAG_VISUAL_HEADER: &str = "uhf tag visual";
-const ANIMAL_SEX_HEADER: &str = "sex";
-const ANIMAL_LIFE_STAGE_OVERRIDE_HEADER: &str = "life stage override";
-const ANIMAL_LAMBING_ID_HEADER: &str = "lambing_id";
-const ANIMAL_DISPOSITION_ID_HEADER: &str = "disposition_id";
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum AnimalColumn {
+    Id,
+    Tag,
+    TipTag,
+    UhfTag,
+    UhfTagVisual,
+    Sex,
+    LifeStageOverride,
+    LambingId,
+    DispositionId,
+}
 
-const ANIMAL_HEADERS: [&str; 9] = [
-    ANIMAL_ID_HEADER,
-    ANIMAL_TAG_HEADER,
-    ANIMAL_TIP_TAG_HEADER,
-    ANIMAL_UHF_TAG_HEADER,
-    ANIMAL_UHF_TAG_VISUAL_HEADER,
-    ANIMAL_SEX_HEADER,
-    ANIMAL_LIFE_STAGE_OVERRIDE_HEADER,
-    ANIMAL_LAMBING_ID_HEADER,
-    ANIMAL_DISPOSITION_ID_HEADER,
-];
+impl AnimalColumn {
+    pub const fn header(self) -> &'static str {
+        match self {
+            Self::Id => "uuid_v7",
+            Self::Tag => "tag",
+            Self::TipTag => "tip tag",
+            Self::UhfTag => "uhf tag",
+            Self::UhfTagVisual => "uhf tag visual",
+            Self::Sex => "sex",
+            Self::LifeStageOverride => "life stage override",
+            Self::LambingId => "lambing_id",
+            Self::DispositionId => "disposition_id",
+        }
+    }
+}
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, PartialEq, Eq)]
 pub enum HeaderError {
     MissingColumn {
-        column_name: String,
+        column: AnimalColumn,
     },
     DuplicateColumn {
-        column_name: String,
+        column: AnimalColumn,
         indices: Vec<usize>,
     },
 }
@@ -39,10 +45,10 @@ pub enum HeaderError {
 #[derive(Debug, PartialEq, Eq)]
 pub enum RowError {
     MissingRequiredValue {
-        field: &'static str,
+        field: AnimalColumn,
     },
     InvalidValue {
-        field: &'static str,
+        field: AnimalColumn,
         value: String,
     },
 }
@@ -72,80 +78,36 @@ pub struct ParsedAnimals {
     pub(crate) row_errors: Vec<LocatedRowError>,
 }
 
-fn index_headers(headers: &[String]) -> HashMap<String, Vec<usize>> {
-    let mut indices_by_header = HashMap::new();
-
-    for (index, header) in headers.iter().enumerate() {
-        indices_by_header
-            .entry(header.trim().to_ascii_lowercase())
-            .or_insert_with(Vec::new)
-            .push(index);
-    }
-
-    indices_by_header
-}
-
-fn require_single_column(
-    headers: &HashMap<String, Vec<usize>>,
-    column_name: &str,
-) -> Result<usize, HeaderError> {
-    match headers.get(column_name).map(Vec::as_slice) {
-        None | Some([]) => Err(HeaderError::MissingColumn {
-            column_name: column_name.to_owned(),
-        }),
-        Some([index]) => Ok(*index),
-        Some(indices) => Err(HeaderError::DuplicateColumn {
-            column_name: column_name.to_owned(),
-            indices: indices.to_vec(),
-        }),
-    }
-}
-
-fn find_animal_columns(headers: &[String]) -> Result<AnimalColumns, Vec<HeaderError>> {
-    let headers = index_headers(headers);
-    let results = [
-        require_single_column(&headers, ANIMAL_ID_HEADER),
-        require_single_column(&headers, ANIMAL_TAG_HEADER),
-        require_single_column(&headers, ANIMAL_TIP_TAG_HEADER),
-        require_single_column(&headers, ANIMAL_UHF_TAG_HEADER),
-        require_single_column(&headers, ANIMAL_UHF_TAG_VISUAL_HEADER),
-        require_single_column(&headers, ANIMAL_SEX_HEADER),
-        require_single_column(&headers, ANIMAL_LIFE_STAGE_OVERRIDE_HEADER),
-        require_single_column(&headers, ANIMAL_LAMBING_ID_HEADER),
-        require_single_column(&headers, ANIMAL_DISPOSITION_ID_HEADER),
-    ];
-
-    let errors: Vec<HeaderError> = results
+fn require_single_column(headers: &[String], column: AnimalColumn) -> Result<usize, HeaderError> {
+    let indices = headers
         .iter()
-        .filter_map(|result| result.as_ref().err().cloned())
-        .collect();
+        .enumerate()
+        .filter_map(|(index, header)| {
+            header
+                .trim()
+                .eq_ignore_ascii_case(column.header())
+                .then_some(index)
+        })
+        .collect::<Vec<_>>();
 
-    if !errors.is_empty() {
-        return Err(errors);
+    match indices.as_slice() {
+        [] => Err(HeaderError::MissingColumn { column }),
+        [index] => Ok(*index),
+        _ => Err(HeaderError::DuplicateColumn { column, indices }),
     }
+}
 
-    let [
-        id,
-        tag,
-        tip_tag,
-        uhf_tag,
-        uhf_tag_visual,
-        sex,
-        life_stage_override,
-        lambing_id,
-        disposition_id,
-    ] = results.map(|result| result.expect("column results were checked above"));
-
+fn find_animal_columns(headers: &[String]) -> Result<AnimalColumns, HeaderError> {
     Ok(AnimalColumns {
-        id,
-        tag,
-        tip_tag,
-        uhf_tag,
-        uhf_tag_visual,
-        sex,
-        life_stage_override,
-        lambing_id,
-        disposition_id,
+        id: require_single_column(headers, AnimalColumn::Id)?,
+        tag: require_single_column(headers, AnimalColumn::Tag)?,
+        tip_tag: require_single_column(headers, AnimalColumn::TipTag)?,
+        uhf_tag: require_single_column(headers, AnimalColumn::UhfTag)?,
+        uhf_tag_visual: require_single_column(headers, AnimalColumn::UhfTagVisual)?,
+        sex: require_single_column(headers, AnimalColumn::Sex)?,
+        life_stage_override: require_single_column(headers, AnimalColumn::LifeStageOverride)?,
+        lambing_id: require_single_column(headers, AnimalColumn::LambingId)?,
+        disposition_id: require_single_column(headers, AnimalColumn::DispositionId)?,
     })
 }
 
@@ -158,7 +120,7 @@ fn cell(row: &[String], column: usize) -> Option<&str> {
 fn parse_required<T>(
     row: &[String],
     column: usize,
-    field: &'static str,
+    field: AnimalColumn,
 ) -> Result<T, RowError>
 where
     T: FromStr,
@@ -174,7 +136,7 @@ where
 fn parse_optional<T>(
     row: &[String],
     column: usize,
-    field: &'static str,
+    field: AnimalColumn,
 ) -> Result<Option<T>, RowError>
 where
     T: FromStr,
@@ -202,7 +164,7 @@ fn parse_sex(value: Option<&str>) -> Result<Sex, RowError> {
         "f" | "female" => Ok(Sex::Female),
         "u" | "unk" | "unknown" => Ok(Sex::Unknown),
         _ => Err(RowError::InvalidValue {
-            field: ANIMAL_SEX_HEADER,
+            field: AnimalColumn::Sex,
             value: value.to_owned(),
         }),
     }
@@ -217,25 +179,25 @@ fn parse_life_stage(value: Option<&str>) -> Result<Option<LifeStage>, RowError> 
         "lamb" => Ok(Some(LifeStage::Lamb)),
         "sheep" => Ok(Some(LifeStage::Sheep)),
         _ => Err(RowError::InvalidValue {
-            field: ANIMAL_LIFE_STAGE_OVERRIDE_HEADER,
+            field: AnimalColumn::LifeStageOverride,
             value: value.to_owned(),
         }),
     }
 }
 
 fn parse_animal_row(row: &[String], columns: &AnimalColumns) -> Result<Animal, RowError> {
-    let id = parse_required::<AnimalId>(row, columns.id, ANIMAL_ID_HEADER)?;
+    let id = parse_required::<AnimalId>(row, columns.id, AnimalColumn::Id)?;
     let tag = cell(row, columns.tag).map(str::to_owned);
     let tip_tag = cell(row, columns.tip_tag).map(str::to_owned);
     let uhf_tag = cell(row, columns.uhf_tag).map(str::to_owned);
     let uhf_tag_visual = cell(row, columns.uhf_tag_visual).map(str::to_owned);
     let sex = parse_sex(cell(row, columns.sex))?;
     let life_stage_override = parse_life_stage(cell(row, columns.life_stage_override))?;
-    let lambing_id = parse_optional::<LambingId>(row, columns.lambing_id, ANIMAL_LAMBING_ID_HEADER)?;
+    let lambing_id = parse_optional::<LambingId>(row, columns.lambing_id, AnimalColumn::LambingId)?;
     let disposition_id = parse_optional::<DispositionId>(
         row,
         columns.disposition_id,
-        ANIMAL_DISPOSITION_ID_HEADER,
+        AnimalColumn::DispositionId,
     )?;
 
     Ok(Animal {
@@ -251,7 +213,7 @@ fn parse_animal_row(row: &[String], columns: &AnimalColumns) -> Result<Animal, R
     })
 }
 
-pub fn parse_animal_rows(rows: &[Vec<String>]) -> Result<ParsedAnimals, Vec<HeaderError>> {
+pub fn parse_animal_rows(rows: &[Vec<String>]) -> Result<ParsedAnimals, HeaderError> {
     let headers = rows.first().map(Vec::as_slice).unwrap_or(&[]);
     let columns = find_animal_columns(headers)?;
 
@@ -287,7 +249,19 @@ mod tests {
     }
 
     fn headers() -> Vec<String> {
-        cells(&ANIMAL_HEADERS)
+        [
+            AnimalColumn::Id,
+            AnimalColumn::Tag,
+            AnimalColumn::TipTag,
+            AnimalColumn::UhfTag,
+            AnimalColumn::UhfTagVisual,
+            AnimalColumn::Sex,
+            AnimalColumn::LifeStageOverride,
+            AnimalColumn::LambingId,
+            AnimalColumn::DispositionId,
+        ]
+        .map(|column| column.header().to_owned())
+        .to_vec()
     }
 
     fn empty_animal(id: &str) -> Animal {
@@ -342,15 +316,13 @@ mod tests {
     }
 
     #[test]
-    fn empty_headers_report_every_required_column() {
-        let expected = ANIMAL_HEADERS
-            .iter()
-            .map(|column_name| HeaderError::MissingColumn {
-                column_name: (*column_name).to_owned(),
-            })
-            .collect::<Vec<_>>();
-
-        assert_eq!(find_animal_columns(&[]), Err(expected));
+    fn missing_column_is_typed() {
+        assert_eq!(
+            find_animal_columns(&[]),
+            Err(HeaderError::MissingColumn {
+                column: AnimalColumn::Id,
+            }),
+        );
     }
 
     #[test]
@@ -360,10 +332,10 @@ mod tests {
 
         assert_eq!(
             find_animal_columns(&headers),
-            Err(vec![HeaderError::DuplicateColumn {
-                column_name: ANIMAL_TAG_HEADER.to_owned(),
+            Err(HeaderError::DuplicateColumn {
+                column: AnimalColumn::Tag,
                 indices: vec![1, 9],
-            }]),
+            }),
         );
     }
 
@@ -404,22 +376,22 @@ mod tests {
     }
 
     #[test]
-    fn invalid_sex_is_reported_with_field_and_value() {
+    fn invalid_sex_is_reported_with_typed_field() {
         assert_eq!(
             parse_sex(Some("ram")),
             Err(RowError::InvalidValue {
-                field: ANIMAL_SEX_HEADER,
+                field: AnimalColumn::Sex,
                 value: "ram".to_owned(),
             }),
         );
     }
 
     #[test]
-    fn invalid_life_stage_is_reported_with_field_and_value() {
+    fn invalid_life_stage_is_reported_with_typed_field() {
         assert_eq!(
             parse_life_stage(Some("adult")),
             Err(RowError::InvalidValue {
-                field: ANIMAL_LIFE_STAGE_OVERRIDE_HEADER,
+                field: AnimalColumn::LifeStageOverride,
                 value: "adult".to_owned(),
             }),
         );
@@ -433,7 +405,7 @@ mod tests {
         assert_eq!(
             parse_animal_row(&row, &columns),
             Err(RowError::MissingRequiredValue {
-                field: ANIMAL_ID_HEADER,
+                field: AnimalColumn::Id,
             }),
         );
     }
@@ -449,7 +421,7 @@ mod tests {
         assert_eq!(
             parse_animal_row(&row, &columns),
             Err(RowError::InvalidValue {
-                field: ANIMAL_LAMBING_ID_HEADER,
+                field: AnimalColumn::LambingId,
                 value: non_v7.to_owned(),
             }),
         );
@@ -479,7 +451,7 @@ mod tests {
                 row_errors: vec![LocatedRowError {
                     row_number: 3,
                     error: RowError::MissingRequiredValue {
-                        field: ANIMAL_ID_HEADER,
+                        field: AnimalColumn::Id,
                     },
                 }],
             }),
@@ -494,9 +466,9 @@ mod tests {
 
         assert_eq!(
             parse_animal_rows(&rows),
-            Err(vec![HeaderError::MissingColumn {
-                column_name: ANIMAL_SEX_HEADER.to_owned(),
-            }]),
+            Err(HeaderError::MissingColumn {
+                column: AnimalColumn::Sex,
+            }),
         );
     }
 }
