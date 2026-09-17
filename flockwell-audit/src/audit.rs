@@ -100,7 +100,9 @@ mod tests {
     }
 
     fn animal(value: &str, tag: Option<&str>) -> Animal {
-        Animal::new(id(value), tag)
+        let mut animal = Animal::new(id(value));
+        animal.tag = tag.map(str::to_owned);
+        animal
     }
 
     #[test]
