@@ -1,19 +1,6 @@
 use std::collections::HashMap;
 
-#[derive(Debug, PartialEq, Eq)]
-pub struct Animal {
-    id: String,
-    tag: Option<String>,
-}
-
-impl Animal {
-    pub fn new(id: &str, tag: Option<&str>) -> Self {
-        Self {
-            id: id.to_string(),
-            tag: tag.map(str::to_string),
-        }
-    }
-}
+use flockwell_domain::Animal;
 
 #[derive(Debug, PartialEq, Eq)]
 struct DuplicateTag {

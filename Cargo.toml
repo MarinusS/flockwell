@@ -1,4 +1,4 @@
 [workspace]
-members = ["flockwell-audit"]
+members = ["flockwell-audit", "flockwell-domain"]
 
 resolver = "2"
