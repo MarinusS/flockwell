@@ -116,9 +116,13 @@ pub fn parse_animal_rows(rows: &[Vec<String>]) -> Result<ParsedAnimals, Vec<Head
 mod tests {
     use super::*;
 
+    fn cells(values: &[&str]) -> Vec<String> {
+        values.iter().map(|value| value.to_string()).collect()
+    }
+
     #[test]
     fn finds_columns_regardless_of_order() {
-        let headers = ["Tag", "Comment", "UUID_v7"];
+        let headers = cells(&["Tag", "Comment", "UUID_v7"]);
 
         assert_eq!(
             find_animal_columns(&headers),
@@ -128,7 +132,7 @@ mod tests {
 
     #[test]
     fn ignores_header_case_and_surrounding_whitespace() {
-        let headers = [" UUID_V7 ", "\tTAG "];
+        let headers = cells(&[" UUID_V7 ", "\tTAG "]);
 
         assert_eq!(
             find_animal_columns(&headers),
@@ -154,7 +158,7 @@ mod tests {
     #[test]
     fn reports_missing_id_column() {
         assert_eq!(
-            find_animal_columns(&["Tag"]),
+            find_animal_columns(&cells(&["Tag"])),
             Err(vec![HeaderError::MissingColumn {
                 column_name: ANIMAL_ID_HEADER.to_string(),
             }]),
@@ -164,7 +168,7 @@ mod tests {
     #[test]
     fn reports_missing_tag_column() {
         assert_eq!(
-            find_animal_columns(&["UUID_v7"]),
+            find_animal_columns(&cells(&["UUID_v7"])),
             Err(vec![HeaderError::MissingColumn {
                 column_name: ANIMAL_TAG_HEADER.to_string(),
             }]),
@@ -173,7 +177,7 @@ mod tests {
 
     #[test]
     fn reports_all_duplicate_tag_indices() {
-        let headers = ["UUID_v7", "Tag", "TAG", " tag "];
+        let headers = cells(&["UUID_v7", "Tag", "TAG", " tag "]);
 
         assert_eq!(
             find_animal_columns(&headers),
@@ -186,7 +190,7 @@ mod tests {
 
     #[test]
     fn reports_all_duplicate_id_indices() {
-        let headers = ["UUID_v7", "Tag", "uuid_v7", " UUID_V7 "];
+        let headers = cells(&["UUID_v7", "Tag", "uuid_v7", " UUID_V7 "]);
 
         assert_eq!(
             find_animal_columns(&headers),
@@ -199,7 +203,7 @@ mod tests {
 
     #[test]
     fn reports_missing_and_duplicate_columns_together() {
-        let headers = ["Tag", "TAG", "tag"];
+        let headers = cells(&["Tag", "TAG", "tag"]);
 
         assert_eq!(
             find_animal_columns(&headers),
@@ -217,7 +221,7 @@ mod tests {
 
     #[test]
     fn reports_both_duplicate_columns_in_id_then_tag_order() {
-        let headers = ["Tag", "UUID_v7", "TAG", "uuid_v7"];
+        let headers = cells(&["Tag", "UUID_v7", "TAG", "uuid_v7"]);
 
         assert_eq!(
             find_animal_columns(&headers),
@@ -236,7 +240,7 @@ mod tests {
 
     #[test]
     fn ignores_unrelated_headers_even_when_duplicated() {
-        let headers = ["Comment", "UUID_v7", "Comment", "Tag", ""];
+        let headers = cells(&["Comment", "UUID_v7", "Comment", "Tag", ""]);
 
         assert_eq!(
             find_animal_columns(&headers),
@@ -247,7 +251,7 @@ mod tests {
     #[test]
     fn trims_animal_id_and_tag() {
         let columns = AnimalColumns { id: 0, tag: 1 };
-        let row = [" animal-1 ", "\t00042 "];
+        let row = cells(&[" animal-1 ", "\t00042 "]);
 
         assert_eq!(
             parse_animal_row(&row, &columns),
@@ -258,7 +262,7 @@ mod tests {
     #[test]
     fn preserves_leading_zeros_in_tag() {
         let columns = AnimalColumns { id: 0, tag: 1 };
-        let row = ["animal-1", "00042"];
+        let row = cells(&["animal-1", "00042"]);
 
         assert_eq!(
             parse_animal_row(&row, &columns),
@@ -271,7 +275,7 @@ mod tests {
         let columns = AnimalColumns { id: 0, tag: 1 };
 
         for tag in ["", " ", "\t\n"] {
-            let row = ["animal-1", tag];
+            let row = cells(&["animal-1", tag]);
 
             assert_eq!(
                 parse_animal_row(&row, &columns),
@@ -284,7 +288,7 @@ mod tests {
     #[test]
     fn missing_tag_cell_becomes_none() {
         let columns = AnimalColumns { id: 0, tag: 1 };
-        let row = ["animal-1"];
+        let row = cells(&["animal-1"]);
 
         assert_eq!(
             parse_animal_row(&row, &columns),
@@ -297,7 +301,7 @@ mod tests {
         let columns = AnimalColumns { id: 0, tag: 1 };
 
         for id in ["", " ", "\t\n"] {
-            let row = [id, "00042"];
+            let row = cells(&[id, "00042"]);
 
             assert_eq!(
                 parse_animal_row(&row, &columns),
@@ -310,7 +314,7 @@ mod tests {
     #[test]
     fn missing_animal_id_cell_is_rejected() {
         let columns = AnimalColumns { id: 1, tag: 0 };
-        let row = ["00042"];
+        let row = cells(&["00042"]);
 
         assert_eq!(
             parse_animal_row(&row, &columns),
@@ -331,7 +335,7 @@ mod tests {
     #[test]
     fn parses_using_supplied_column_positions() {
         let columns = AnimalColumns { id: 2, tag: 0 };
-        let row = ["00042", "Some comment", "animal-1"];
+        let row = cells(&["00042", "Some comment", "animal-1"]);
 
         assert_eq!(
             parse_animal_row(&row, &columns),
@@ -355,10 +359,10 @@ mod tests {
 
     #[test]
     fn headers_only_produce_no_animals_or_row_errors() {
-        let rows: &[&[&str]] = &[&["UUID_v7", "Tag"]];
+        let rows = vec![cells(&["UUID_v7", "Tag"])];
 
         assert_eq!(
-            parse_animal_rows(rows),
+            parse_animal_rows(&rows),
             Ok(ParsedAnimals {
                 animals: vec![],
                 row_errors: vec![],
@@ -368,10 +372,10 @@ mod tests {
 
     #[test]
     fn parses_data_rows_without_treating_headers_as_an_animal() {
-        let rows: &[&[&str]] = &[
-            &["UUID_v7", "Tag"],
-            &["animal-1", "00042"],
-            &["animal-2", "00099"],
+        let rows = vec![
+            cells(&["UUID_v7", "Tag"]),
+            cells(&["animal-1", "00042"]),
+            cells(&["animal-2", "00099"]),
         ];
 
         let expected_animals = vec![
@@ -380,7 +384,7 @@ mod tests {
         ];
 
         assert_eq!(
-            parse_animal_rows(rows),
+            parse_animal_rows(&rows),
             Ok(ParsedAnimals {
                 animals: expected_animals,
                 row_errors: vec![],
@@ -390,11 +394,11 @@ mod tests {
 
     #[test]
     fn retains_valid_animals_and_reports_invalid_row_location() {
-        let rows: &[&[&str]] = &[
-            &["UUID_v7", "Tag"],
-            &["animal-1", "00042"],
-            &["", "00099"],
-            &["animal-2", "00100"],
+        let rows = vec![
+            cells(&["UUID_v7", "Tag"]),
+            cells(&["animal-1", "00042"]),
+            cells(&["", "00099"]),
+            cells(&["animal-2", "00100"]),
         ];
 
         let expected_animals = vec![
@@ -408,7 +412,7 @@ mod tests {
         }];
 
         assert_eq!(
-            parse_animal_rows(rows),
+            parse_animal_rows(&rows),
             Ok(ParsedAnimals {
                 animals: expected_animals,
                 row_errors: expected_errors,
@@ -418,11 +422,11 @@ mod tests {
 
     #[test]
     fn collects_multiple_row_errors_without_stopping_early() {
-        let rows: &[&[&str]] = &[
-            &["UUID_v7", "Tag"],
-            &["", "00042"],
-            &["animal-1", "00099"],
-            &["   ", "00100"],
+        let rows = vec![
+            cells(&["UUID_v7", "Tag"]),
+            cells(&["", "00042"]),
+            cells(&["animal-1", "00099"]),
+            cells(&["   ", "00100"]),
         ];
 
         let expected_animals = vec![Animal::new("animal-1", Some("00099"))];
@@ -439,7 +443,7 @@ mod tests {
         ];
 
         assert_eq!(
-            parse_animal_rows(rows),
+            parse_animal_rows(&rows),
             Ok(ParsedAnimals {
                 animals: expected_animals,
                 row_errors: expected_errors,
@@ -449,10 +453,13 @@ mod tests {
 
     #[test]
     fn invalid_headers_prevent_row_parsing() {
-        let rows: &[&[&str]] = &[&["UUID_v7", "Tag", "TAG"], &["animal-1", "00042", "00099"]];
+        let rows = vec![
+            cells(&["UUID_v7", "Tag", "TAG"]),
+            cells(&["animal-1", "00042", "00099"]),
+        ];
 
         assert_eq!(
-            parse_animal_rows(rows),
+            parse_animal_rows(&rows),
             Err(vec![HeaderError::DuplicateColumn {
                 column_name: ANIMAL_TAG_HEADER.to_string(),
                 indices: vec![1, 2],
