@@ -1,3 +1,4 @@
+mod google_sheets;
 mod json_input;
 mod sheet_input;
 
@@ -7,7 +8,35 @@ use std::process::ExitCode;
 use flockwell_audit::audit_animals;
 use json_input::load_animals;
 
-fn main() -> ExitCode {
+#[tokio::main(flavor = "current_thread")]
+async fn main() -> ExitCode {
+    let token = match google_sheets::authenticate().await {
+        Ok(token) => {
+            println!("Google authentication succeeded");
+            token
+        }
+        Err(err) => {
+            eprintln!("{err}");
+            return ExitCode::from(2);
+        }
+    };
+
+    match google_sheets::fetch_animal_headers(
+        &token,
+        "1i3cuiIWHw4vefJTLJ5Gq-3opdnsEXuu4J7pavTfBX3M",
+    )
+    .await
+    {
+        Ok(headers) => {
+            println!("Animal headers: ");
+            println!("{headers:#?}");
+        }
+        Err(err) => {
+            eprintln!("{err}");
+            return ExitCode::from(2);
+        }
+    }
+
     let input_path = match std::env::args_os().nth(1) {
         Some(path) => PathBuf::from(path),
         None => {
