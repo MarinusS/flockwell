@@ -82,6 +82,22 @@ impl std::fmt::Display for AnimalId {
     }
 }
 
+impl Animal {
+    pub fn new(id: AnimalId) -> Self {
+        Self {
+            id,
+            tag: None,
+            tip_tag: None,
+            uhf_tag: None,
+            uhf_tag_visual: None,
+            sex: Sex::Unknown,
+            life_stage_override: None,
+            lambing_id: None,
+            disposition_id: None,
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -112,5 +128,23 @@ mod tests {
             AnimalId::from_str("not-a-uuid"),
             Err(AnimalIdParseError::InvalidUuid(_))
         ));
+    }
+
+    #[test]
+    fn animal_new_sets_default_state() {
+        let id = AnimalId::from_str("00000000-0000-7000-8000-000000000001")
+            .expect("test ID is a valid UUIDv7");
+
+        let animal = Animal::new(id);
+
+        assert_eq!(animal.id, id);
+        assert_eq!(animal.tag, None);
+        assert_eq!(animal.tip_tag, None);
+        assert_eq!(animal.uhf_tag, None);
+        assert_eq!(animal.uhf_tag_visual, None);
+        assert_eq!(animal.sex, Sex::Unknown);
+        assert_eq!(animal.life_stage_override, None);
+        assert_eq!(animal.lambing_id, None);
+        assert_eq!(animal.disposition_id, None);
     }
 }
