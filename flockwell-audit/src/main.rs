@@ -10,32 +10,38 @@ use json_input::load_animals;
 
 #[tokio::main(flavor = "current_thread")]
 async fn main() -> ExitCode {
-    let token = match google_sheets::authenticate().await {
-        Ok(token) => {
+    let sheets_client = match google_sheets::Client::new().await {
+        Ok(client) => {
             println!("Google authentication succeeded");
-            token
+            client
         }
         Err(err) => {
-            eprintln!("{err}");
+            eprintln!("Google authentication failed: {err}");
             return ExitCode::from(2);
         }
     };
 
-    match google_sheets::fetch_animal_headers(
-        &token,
-        "1i3cuiIWHw4vefJTLJ5Gq-3opdnsEXuu4J7pavTfBX3M",
-    )
-    .await
-    {
-        Ok(headers) => {
-            println!("Animal headers: ");
-            println!("{headers:#?}");
+    let animals_table = match sheets_client.fetch_animal_table().await {
+        Ok(animals_table) => {
+            println!("Succesfully fetched animals table");
+            animals_table
         }
         Err(err) => {
-            eprintln!("{err}");
+            eprintln!("Failed to fetch animals table: {err}");
             return ExitCode::from(2);
         }
-    }
+    };
+
+    let animals = match sheet_input::parse_animal_rows(&animals_table) {
+        Ok(animals) => {
+            println!("Parsed animals: {animals:#?}");
+            animals
+        }
+        Err(_err) => {
+            println!("Could parse animals because of header errors: ");
+            return ExitCode::from(2);
+        }
+    };
 
     let input_path = match std::env::args_os().nth(1) {
         Some(path) => PathBuf::from(path),

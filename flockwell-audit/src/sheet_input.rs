@@ -4,7 +4,7 @@ const ANIMAL_ID_HEADER: &str = "uuid_v7";
 const ANIMAL_TAG_HEADER: &str = "tag";
 
 #[derive(Debug, PartialEq, Eq)]
-enum HeaderError {
+pub enum HeaderError {
     MissingColumn {
         column_name: String,
     },
@@ -15,12 +15,12 @@ enum HeaderError {
 }
 
 #[derive(Debug, PartialEq, Eq)]
-enum RowError {
+pub enum RowError {
     MissingAnimalId,
 }
 
 #[derive(Debug, PartialEq, Eq)]
-struct LocatedRowError {
+pub struct LocatedRowError {
     row_number: usize,
     error: RowError,
 }
@@ -32,7 +32,7 @@ struct AnimalColumns {
 }
 
 #[derive(Debug, PartialEq, Eq)]
-struct ParsedAnimals {
+pub struct ParsedAnimals {
     animals: Vec<Animal>,
     row_errors: Vec<LocatedRowError>,
 }
@@ -50,7 +50,7 @@ fn require_single_column(column_name: &str, indices: Vec<usize>) -> Result<usize
     }
 }
 
-fn find_animal_columns(headers: &[&str]) -> Result<AnimalColumns, Vec<HeaderError>> {
+fn find_animal_columns(headers: &[String]) -> Result<AnimalColumns, Vec<HeaderError>> {
     let mut id_indices = Vec::new();
     let mut tag_indices = Vec::new();
 
@@ -75,7 +75,7 @@ fn find_animal_columns(headers: &[&str]) -> Result<AnimalColumns, Vec<HeaderErro
     }
 }
 
-fn parse_animal_row(row: &[&str], columns: &AnimalColumns) -> Result<Animal, RowError> {
+fn parse_animal_row(row: &[String], columns: &AnimalColumns) -> Result<Animal, RowError> {
     let id = row
         .get(columns.id)
         .map(|value| value.trim())
@@ -90,8 +90,8 @@ fn parse_animal_row(row: &[&str], columns: &AnimalColumns) -> Result<Animal, Row
     Ok(Animal::new(id, tag))
 }
 
-fn parse_animal_rows(rows: &[&[&str]]) -> Result<ParsedAnimals, Vec<HeaderError>> {
-    let headers = rows.first().copied().unwrap_or(&[]);
+pub fn parse_animal_rows(rows: &[Vec<String>]) -> Result<ParsedAnimals, Vec<HeaderError>> {
+    let headers = rows.first().map(Vec::as_slice).unwrap_or(&[]);
     let columns = find_animal_columns(headers)?;
 
     let mut animals = Vec::new();
