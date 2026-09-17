@@ -7,7 +7,7 @@ pub struct LambingId(Uuid);
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct DispositionId(Uuid);
 
-#[derive(Debug, PartialEq, Eq)]
+#[derive(Debug)]
 pub enum AnimalIdParseError {
     InvalidUuid(uuid::Error),
     NotUuidV7,
@@ -116,7 +116,10 @@ mod tests {
     fn animal_id_rejects_other_uuid_versions() {
         let value = "00000000-0000-4000-8000-000000000001";
 
-        assert_eq!(AnimalId::from_str(value), Err(AnimalIdParseError::NotUuidV7));
+        assert!(matches!(
+            AnimalId::from_str(value),
+            Err(AnimalIdParseError::NotUuidV7)
+        ));
     }
 
     #[test]
