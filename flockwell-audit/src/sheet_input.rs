@@ -119,11 +119,15 @@ pub fn parse_animal_rows(rows: &[Vec<String>]) -> Result<ParsedAnimals, Vec<Head
 mod tests {
     use super::*;
 
-    const ANIMAL_1: &str = "00000000-0000-0000-0000-000000000011";
-    const ANIMAL_2: &str = "00000000-0000-0000-0000-000000000012";
+    const ANIMAL_1: &str = "00000000-0000-7000-8000-000000000011";
+    const ANIMAL_2: &str = "00000000-0000-7000-8000-000000000012";
 
     fn cells(values: &[&str]) -> Vec<String> {
         values.iter().map(|value| value.to_string()).collect()
+    }
+
+    fn animal(id: &str, tag: Option<&str>) -> Animal {
+        Animal::new(id.parse().expect("test IDs are valid UUIDv7 values"), tag)
     }
 
     #[test]
@@ -261,7 +265,7 @@ mod tests {
 
         assert_eq!(
             parse_animal_row(&row, &columns),
-            Ok(Animal::new(ANIMAL_1, Some("00042"))),
+            Ok(animal(ANIMAL_1, Some("00042"))),
         );
     }
 
@@ -272,7 +276,7 @@ mod tests {
 
         assert_eq!(
             parse_animal_row(&row, &columns),
-            Ok(Animal::new(ANIMAL_1, Some("00042"))),
+            Ok(animal(ANIMAL_1, Some("00042"))),
         );
     }
 
@@ -285,7 +289,7 @@ mod tests {
 
             assert_eq!(
                 parse_animal_row(&row, &columns),
-                Ok(Animal::new(ANIMAL_1, None)),
+                Ok(animal(ANIMAL_1, None)),
                 "Failed for tag {tag:?}",
             );
         }
@@ -298,7 +302,7 @@ mod tests {
 
         assert_eq!(
             parse_animal_row(&row, &columns),
-            Ok(Animal::new(ANIMAL_1, None)),
+            Ok(animal(ANIMAL_1, None)),
         );
     }
 
@@ -315,6 +319,17 @@ mod tests {
                 "Failed for ID {id:?}",
             );
         }
+    }
+
+    #[test]
+    fn non_v7_animal_ids_are_rejected() {
+        let columns = AnimalColumns { id: 0, tag: 1 };
+        let row = cells(&["00000000-0000-4000-8000-000000000011", "00042"]);
+
+        assert_eq!(
+            parse_animal_row(&row, &columns),
+            Err(RowError::InvalidAnimalId),
+        );
     }
 
     #[test]
@@ -345,9 +360,10 @@ mod tests {
 
         assert_eq!(
             parse_animal_row(&row, &columns),
-            Ok(Animal::new(ANIMAL_1, Some("00042"))),
+            Ok(animal(ANIMAL_1, Some("00042"))),
         );
     }
+
     #[test]
     fn empty_sheet_reports_missing_headers() {
         assert_eq!(
@@ -385,8 +401,8 @@ mod tests {
         ];
 
         let expected_animals = vec![
-            Animal::new(ANIMAL_1, Some("00042")),
-            Animal::new(ANIMAL_2, Some("00099")),
+            animal(ANIMAL_1, Some("00042")),
+            animal(ANIMAL_2, Some("00099")),
         ];
 
         assert_eq!(
@@ -408,8 +424,8 @@ mod tests {
         ];
 
         let expected_animals = vec![
-            Animal::new(ANIMAL_1, Some("00042")),
-            Animal::new(ANIMAL_2, Some("00100")),
+            animal(ANIMAL_1, Some("00042")),
+            animal(ANIMAL_2, Some("00100")),
         ];
 
         let expected_errors = vec![LocatedRowError {
@@ -435,7 +451,7 @@ mod tests {
             cells(&["   ", "00100"]),
         ];
 
-        let expected_animals = vec![Animal::new(ANIMAL_1, Some("00099"))];
+        let expected_animals = vec![animal(ANIMAL_1, Some("00099"))];
 
         let expected_errors = vec![
             LocatedRowError {
