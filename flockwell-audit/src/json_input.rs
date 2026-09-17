@@ -1,7 +1,8 @@
 use std::error::Error;
 use std::path::Path;
 
-use flockwell_audit::Animal;
+use flockwell_domain::{Animal, AnimalId};
+use std::str::FromStr;
 
 #[derive(serde::Deserialize)]
 struct AnimalInput {
@@ -15,8 +16,11 @@ pub(crate) fn load_animals(path: &Path) -> Result<Vec<Animal>, Box<dyn Error>> {
 
     let animals = animal_inputs
         .into_iter()
-        .map(|input| Animal::new(&input.id, input.tag.as_deref()))
-        .collect();
+        .map(|input| {
+            let id = AnimalId::from_str(&input.id)?;
+            Ok(Animal::new(id, input.tag.as_deref()))
+        })
+        .collect::<Result<Vec<_>, Box<dyn Error>>>()?;
 
     Ok(animals)
 }

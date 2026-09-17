@@ -1,4 +1,5 @@
-use flockwell_audit::Animal;
+use flockwell_domain::{Animal, AnimalId};
+use std::str::FromStr;
 
 const ANIMAL_ID_HEADER: &str = "uuid_v7";
 const ANIMAL_TAG_HEADER: &str = "tag";
@@ -17,6 +18,7 @@ pub enum HeaderError {
 #[derive(Debug, PartialEq, Eq)]
 pub enum RowError {
     MissingAnimalId,
+    InvalidAnimalId,
 }
 
 #[derive(Debug, PartialEq, Eq)]
@@ -87,6 +89,7 @@ fn parse_animal_row(row: &[String], columns: &AnimalColumns) -> Result<Animal, R
         .map(|value| value.trim())
         .filter(|value| !value.is_empty());
 
+    let id = AnimalId::from_str(id).map_err(|_| RowError::InvalidAnimalId)?;
     Ok(Animal::new(id, tag))
 }
 
@@ -115,6 +118,9 @@ pub fn parse_animal_rows(rows: &[Vec<String>]) -> Result<ParsedAnimals, Vec<Head
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    const ANIMAL_1: &str = "00000000-0000-0000-0000-000000000011";
+    const ANIMAL_2: &str = "00000000-0000-0000-0000-000000000012";
 
     fn cells(values: &[&str]) -> Vec<String> {
         values.iter().map(|value| value.to_string()).collect()
@@ -251,22 +257,22 @@ mod tests {
     #[test]
     fn trims_animal_id_and_tag() {
         let columns = AnimalColumns { id: 0, tag: 1 };
-        let row = cells(&[" animal-1 ", "\t00042 "]);
+        let row = cells(&[ANIMAL_1, "\t00042 "]);
 
         assert_eq!(
             parse_animal_row(&row, &columns),
-            Ok(Animal::new("animal-1", Some("00042"))),
+            Ok(Animal::new(ANIMAL_1, Some("00042"))),
         );
     }
 
     #[test]
     fn preserves_leading_zeros_in_tag() {
         let columns = AnimalColumns { id: 0, tag: 1 };
-        let row = cells(&["animal-1", "00042"]);
+        let row = cells(&[ANIMAL_1, "00042"]);
 
         assert_eq!(
             parse_animal_row(&row, &columns),
-            Ok(Animal::new("animal-1", Some("00042"))),
+            Ok(Animal::new(ANIMAL_1, Some("00042"))),
         );
     }
 
@@ -275,11 +281,11 @@ mod tests {
         let columns = AnimalColumns { id: 0, tag: 1 };
 
         for tag in ["", " ", "\t\n"] {
-            let row = cells(&["animal-1", tag]);
+            let row = cells(&[ANIMAL_1, tag]);
 
             assert_eq!(
                 parse_animal_row(&row, &columns),
-                Ok(Animal::new("animal-1", None)),
+                Ok(Animal::new(ANIMAL_1, None)),
                 "Failed for tag {tag:?}",
             );
         }
@@ -288,11 +294,11 @@ mod tests {
     #[test]
     fn missing_tag_cell_becomes_none() {
         let columns = AnimalColumns { id: 0, tag: 1 };
-        let row = cells(&["animal-1"]);
+        let row = cells(&[ANIMAL_1]);
 
         assert_eq!(
             parse_animal_row(&row, &columns),
-            Ok(Animal::new("animal-1", None)),
+            Ok(Animal::new(ANIMAL_1, None)),
         );
     }
 
@@ -335,11 +341,11 @@ mod tests {
     #[test]
     fn parses_using_supplied_column_positions() {
         let columns = AnimalColumns { id: 2, tag: 0 };
-        let row = cells(&["00042", "Some comment", "animal-1"]);
+        let row = cells(&["00042", "Some comment", ANIMAL_1]);
 
         assert_eq!(
             parse_animal_row(&row, &columns),
-            Ok(Animal::new("animal-1", Some("00042"))),
+            Ok(Animal::new(ANIMAL_1, Some("00042"))),
         );
     }
     #[test]
@@ -374,13 +380,13 @@ mod tests {
     fn parses_data_rows_without_treating_headers_as_an_animal() {
         let rows = vec![
             cells(&["UUID_v7", "Tag"]),
-            cells(&["animal-1", "00042"]),
-            cells(&["animal-2", "00099"]),
+            cells(&[ANIMAL_1, "00042"]),
+            cells(&[ANIMAL_2, "00099"]),
         ];
 
         let expected_animals = vec![
-            Animal::new("animal-1", Some("00042")),
-            Animal::new("animal-2", Some("00099")),
+            Animal::new(ANIMAL_1, Some("00042")),
+            Animal::new(ANIMAL_2, Some("00099")),
         ];
 
         assert_eq!(
@@ -396,14 +402,14 @@ mod tests {
     fn retains_valid_animals_and_reports_invalid_row_location() {
         let rows = vec![
             cells(&["UUID_v7", "Tag"]),
-            cells(&["animal-1", "00042"]),
+            cells(&[ANIMAL_1, "00042"]),
             cells(&["", "00099"]),
-            cells(&["animal-2", "00100"]),
+            cells(&[ANIMAL_2, "00100"]),
         ];
 
         let expected_animals = vec![
-            Animal::new("animal-1", Some("00042")),
-            Animal::new("animal-2", Some("00100")),
+            Animal::new(ANIMAL_1, Some("00042")),
+            Animal::new(ANIMAL_2, Some("00100")),
         ];
 
         let expected_errors = vec![LocatedRowError {
@@ -425,11 +431,11 @@ mod tests {
         let rows = vec![
             cells(&["UUID_v7", "Tag"]),
             cells(&["", "00042"]),
-            cells(&["animal-1", "00099"]),
+            cells(&[ANIMAL_1, "00099"]),
             cells(&["   ", "00100"]),
         ];
 
-        let expected_animals = vec![Animal::new("animal-1", Some("00099"))];
+        let expected_animals = vec![Animal::new(ANIMAL_1, Some("00099"))];
 
         let expected_errors = vec![
             LocatedRowError {
