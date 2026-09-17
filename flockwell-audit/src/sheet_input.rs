@@ -33,8 +33,8 @@ struct AnimalColumns {
 
 #[derive(Debug, PartialEq, Eq)]
 pub struct ParsedAnimals {
-    animals: Vec<Animal>,
-    row_errors: Vec<LocatedRowError>,
+    pub(crate) animals: Vec<Animal>,
+    pub(crate) row_errors: Vec<LocatedRowError>,
 }
 
 fn require_single_column(column_name: &str, indices: Vec<usize>) -> Result<usize, HeaderError> {
