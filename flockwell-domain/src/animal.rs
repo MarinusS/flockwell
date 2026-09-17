@@ -82,22 +82,6 @@ impl std::fmt::Display for AnimalId {
     }
 }
 
-impl Animal {
-    pub fn new(id: AnimalId, tag: Option<&str>) -> Self {
-        Self {
-            id,
-            tag: tag.map(str::to_owned),
-            tip_tag: None,
-            uhf_tag: None,
-            uhf_tag_visual: None,
-            sex: Sex::Unknown,
-            life_stage_override: None,
-            lambing_id: None,
-            disposition_id: None,
-        }
-    }
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
