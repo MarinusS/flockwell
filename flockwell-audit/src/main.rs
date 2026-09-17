@@ -1,12 +1,9 @@
 mod google_sheets;
-mod json_input;
 mod sheet_input;
 
-use std::path::PathBuf;
 use std::process::ExitCode;
 
 use flockwell_audit::audit_animals;
-use json_input::load_animals;
 
 #[tokio::main(flavor = "current_thread")]
 async fn main() -> ExitCode {
@@ -32,7 +29,7 @@ async fn main() -> ExitCode {
         }
     };
 
-    let animals = match sheet_input::parse_animal_rows(&animals_table) {
+    let parsed = match sheet_input::parse_animal_rows(&animals_table) {
         Ok(animals) => {
             println!("Parsed animals: {animals:#?}");
             animals
@@ -43,25 +40,9 @@ async fn main() -> ExitCode {
         }
     };
 
-    let input_path = match std::env::args_os().nth(1) {
-        Some(path) => PathBuf::from(path),
-        None => {
-            eprintln!("Usage: flockwell-audit <animals.json>");
-            return ExitCode::from(2);
-        }
-    };
+    println!("Read {} animals", parsed.animals.len());
 
-    let animals = match load_animals(&input_path) {
-        Ok(animals) => animals,
-        Err(err) => {
-            eprintln!("Could not load {}: {err}", input_path.display());
-            return ExitCode::from(2);
-        }
-    };
-
-    println!("Read {} animals", animals.len());
-
-    let audit = audit_animals(&animals);
+    let audit = audit_animals(&parsed.animals);
 
     if audit.has_errors() {
         println!("{audit:#?}");

@@ -33,7 +33,7 @@ struct AnimalColumns {
 
 #[derive(Debug, PartialEq, Eq)]
 pub struct ParsedAnimals {
-    animals: Vec<Animal>,
+    pub(crate) animals: Vec<Animal>,
     row_errors: Vec<LocatedRowError>,
 }
 
