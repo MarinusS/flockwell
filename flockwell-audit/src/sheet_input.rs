@@ -90,7 +90,9 @@ fn parse_animal_row(row: &[String], columns: &AnimalColumns) -> Result<Animal, R
         .filter(|value| !value.is_empty());
 
     let id = AnimalId::from_str(id).map_err(|_| RowError::InvalidAnimalId)?;
-    Ok(Animal::new(id, tag))
+    let mut animal = Animal::new(id);
+    animal.tag = tag.map(str::to_owned);
+    Ok(animal)
 }
 
 pub fn parse_animal_rows(rows: &[Vec<String>]) -> Result<ParsedAnimals, Vec<HeaderError>> {
@@ -127,7 +129,9 @@ mod tests {
     }
 
     fn animal(id: &str, tag: Option<&str>) -> Animal {
-        Animal::new(id.parse().expect("test IDs are valid UUIDv7 values"), tag)
+        let mut animal = Animal::new(id.parse().expect("test IDs are valid UUIDv7 values"));
+        animal.tag = tag.map(str::to_owned);
+        animal
     }
 
     #[test]
@@ -381,7 +385,7 @@ mod tests {
 
     #[test]
     fn headers_only_produce_no_animals_or_row_errors() {
-        let rows = vec![cells(&["UUID_v7", "Tag"])];
+        let rows = vec![cells(&["UUID_v7", "Tag"] )];
 
         assert_eq!(
             parse_animal_rows(&rows),
