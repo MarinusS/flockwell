@@ -1,17 +1,16 @@
 use std::collections::HashMap;
 
-use flockwell_domain::Animal;
-use flockwell_domain::AnimalId;
+use flockwell_domain::{Animal, AnimalId};
 
 #[derive(Debug, PartialEq, Eq)]
 struct DuplicateTag {
     tag: String,
-    animal_ids: Vec<String>,
+    animal_ids: Vec<AnimalId>,
 }
 
 #[derive(Debug, PartialEq, Eq)]
 struct DuplicateId {
-    id: String,
+    id: AnimalId,
     count: usize,
 }
 
@@ -27,14 +26,14 @@ fn find_duplicate_tags(animals: &[Animal]) -> Vec<DuplicateTag> {
     ids_by_tag.retain(|_, ids| ids.len() > 1);
 
     for ids in ids_by_tag.values_mut() {
-        ids.sort_unstable_by_key(|id| id.to_string());
+        ids.sort_unstable();
     }
 
     let mut duplicates: Vec<DuplicateTag> = ids_by_tag
         .into_iter()
-        .map(|(tag, ids)| DuplicateTag {
+        .map(|(tag, animal_ids)| DuplicateTag {
             tag: tag.to_string(),
-            animal_ids: ids.into_iter().map(|id| id.to_string()).collect(),
+            animal_ids,
         })
         .collect();
 
@@ -54,13 +53,10 @@ fn find_duplicate_ids(animals: &[Animal]) -> Vec<DuplicateId> {
 
     let mut duplicates: Vec<DuplicateId> = counts_by_id
         .into_iter()
-        .map(|(id, count)| DuplicateId {
-            id: id.to_string(),
-            count,
-        })
+        .map(|(id, count)| DuplicateId { id, count })
         .collect();
 
-    duplicates.sort_by(|a, b| a.id.cmp(&b.id));
+    duplicates.sort_unstable_by_key(|duplicate| duplicate.id);
 
     duplicates
 }
@@ -87,19 +83,20 @@ pub fn audit_animals(animals: &[Animal]) -> AuditReport {
 #[cfg(test)]
 mod tests {
     use super::*;
+
     fn id(value: &str) -> AnimalId {
         let value = match value {
-            "a" => "00000000-0000-0000-0000-000000000001",
-            "b" => "00000000-0000-0000-0000-000000000002",
-            "c" => "00000000-0000-0000-0000-000000000003",
-            "animal-1" => "00000000-0000-0000-0000-000000000011",
-            "animal-2" => "00000000-0000-0000-0000-000000000012",
-            "animal-3" => "00000000-0000-0000-0000-000000000013",
-            "animal-4" => "00000000-0000-0000-0000-000000000014",
-            "animal-5" => "00000000-0000-0000-0000-000000000015",
+            "a" => "00000000-0000-7000-8000-000000000001",
+            "b" => "00000000-0000-7000-8000-000000000002",
+            "c" => "00000000-0000-7000-8000-000000000003",
+            "animal-1" => "00000000-0000-7000-8000-000000000011",
+            "animal-2" => "00000000-0000-7000-8000-000000000012",
+            "animal-3" => "00000000-0000-7000-8000-000000000013",
+            "animal-4" => "00000000-0000-7000-8000-000000000014",
+            "animal-5" => "00000000-0000-7000-8000-000000000015",
             _ => value,
         };
-        value.parse().expect("test IDs are valid UUIDs")
+        value.parse().expect("test IDs are valid UUIDv7 values")
     }
 
     fn animal(value: &str, tag: Option<&str>) -> Animal {
@@ -118,7 +115,7 @@ mod tests {
 
         let expected = vec![DuplicateTag {
             tag: "00042".to_string(),
-            animal_ids: vec![id("animal-1").to_string(), id("animal-2").to_string()],
+            animal_ids: vec![id("animal-1"), id("animal-2")],
         }];
 
         assert_eq!(find_duplicate_tags(&animals), expected);
@@ -146,11 +143,7 @@ mod tests {
 
         let expected = vec![DuplicateTag {
             tag: "00042".to_string(),
-            animal_ids: vec![
-                id("animal-1").to_string(),
-                id("animal-2").to_string(),
-                id("animal-3").to_string(),
-            ],
+            animal_ids: vec![id("animal-1"), id("animal-2"), id("animal-3")],
         }];
 
         assert_eq!(find_duplicate_tags(&animals), expected);
@@ -166,11 +159,7 @@ mod tests {
 
         let expected = vec![DuplicateTag {
             tag: "00042".to_string(),
-            animal_ids: vec![
-                id("animal-1").to_string(),
-                id("animal-2").to_string(),
-                id("animal-3").to_string(),
-            ],
+            animal_ids: vec![id("animal-1"), id("animal-2"), id("animal-3")],
         }];
 
         assert_eq!(find_duplicate_tags(&animals), expected);
@@ -192,11 +181,11 @@ mod tests {
         let expected = vec![
             DuplicateTag {
                 tag: "00042".to_string(),
-                animal_ids: vec![id("animal-1").to_string(), id("animal-2").to_string()],
+                animal_ids: vec![id("animal-1"), id("animal-2")],
             },
             DuplicateTag {
                 tag: "00099".to_string(),
-                animal_ids: vec![id("animal-3").to_string(), id("animal-4").to_string()],
+                animal_ids: vec![id("animal-3"), id("animal-4")],
             },
         ];
 
@@ -214,7 +203,7 @@ mod tests {
         ];
 
         let expected = vec![DuplicateId {
-            id: id("animal-2").to_string(),
+            id: id("animal-2"),
             count: 2,
         }];
 
@@ -234,17 +223,18 @@ mod tests {
 
         let expected = vec![
             DuplicateId {
-                id: id("a").to_string(),
+                id: id("a"),
                 count: 2,
             },
             DuplicateId {
-                id: id("b").to_string(),
+                id: id("b"),
                 count: 3,
             },
         ];
 
         assert_eq!(find_duplicate_ids(&animals), expected);
     }
+
     #[test]
     fn report_without_findings_has_no_errors() {
         let report = AuditReport {
@@ -259,7 +249,7 @@ mod tests {
     fn report_with_only_duplicate_ids_has_errors() {
         let report = AuditReport {
             duplicate_ids: vec![DuplicateId {
-                id: id("animal-1").to_string(),
+                id: id("animal-1"),
                 count: 2,
             }],
             duplicate_tags: vec![],
@@ -274,7 +264,7 @@ mod tests {
             duplicate_ids: vec![],
             duplicate_tags: vec![DuplicateTag {
                 tag: "00042".to_string(),
-                animal_ids: vec![id("animal-1").to_string(), id("animal-2").to_string()],
+                animal_ids: vec![id("animal-1"), id("animal-2")],
             }],
         };
 
@@ -285,12 +275,12 @@ mod tests {
     fn report_with_both_types_of_findings_has_errors() {
         let report = AuditReport {
             duplicate_ids: vec![DuplicateId {
-                id: id("animal-1").to_string(),
+                id: id("animal-1"),
                 count: 2,
             }],
             duplicate_tags: vec![DuplicateTag {
                 tag: "00042".to_string(),
-                animal_ids: vec![id("animal-1").to_string(), id("animal-2").to_string()],
+                animal_ids: vec![id("animal-1"), id("animal-2")],
             }],
         };
 
