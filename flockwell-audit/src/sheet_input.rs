@@ -1,8 +1,8 @@
 use std::str::FromStr;
 
 use flockwell_domain::{
-    Animal, AnimalData, AnimalId, DispositionId, LambingId, LifeStage, Sex, Tag, TipTag, UhfTag,
-    UhfTagVisual,
+    Animal, AnimalData, AnimalId, DispositionId, LambingId, LifeStage, Sex, Tag, TagParseError,
+    TipTag, UhfTag, UhfTagVisual,
 };
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -49,8 +49,18 @@ pub enum HeaderError {
 
 #[derive(Debug, PartialEq, Eq)]
 pub enum RowError {
-    MissingRequiredValue { field: AnimalColumn },
-    InvalidValue { field: AnimalColumn, value: String },
+    MissingRequiredValue {
+        field: AnimalColumn,
+    },
+    InvalidValue {
+        field: AnimalColumn,
+        value: String,
+    },
+    InvalidTag {
+        field: AnimalColumn,
+        value: String,
+        reason: TagParseError,
+    },
 }
 
 #[derive(Debug, PartialEq, Eq)]
@@ -150,6 +160,22 @@ where
     })
 }
 
+fn parse_optional_tag<T: FromStr<Err = TagParseError>>(
+    row: &[String],
+    column: usize,
+    field: AnimalColumn,
+) -> Result<Option<T>, RowError> {
+    cell(row, column)
+        .map(|value| {
+            value.parse().map_err(|reason| RowError::InvalidTag {
+                field,
+                value: value.to_owned(),
+                reason,
+            })
+        })
+        .transpose()
+}
+
 fn parse_sex(value: Option<&str>) -> Result<Sex, RowError> {
     let Some(value) = value else {
         return Ok(Sex::Unknown);
@@ -183,12 +209,15 @@ fn parse_life_stage(value: Option<&str>) -> Result<Option<LifeStage>, RowError> 
 
 fn parse_animal_row(row: &[String], columns: &AnimalColumns) -> Result<Animal, RowError> {
     let id = parse_required::<AnimalId>(row, columns.id, AnimalColumn::Id)?;
-    let tag = parse_optional::<Tag>(row, columns.tag, AnimalColumn::Tag)?;
+    let tag = parse_optional_tag::<Tag>(row, columns.tag, AnimalColumn::Tag)?;
     let comment = cell(row, columns.comment).map(str::to_owned);
-    let tip_tag = parse_optional::<TipTag>(row, columns.tip_tag, AnimalColumn::TipTag)?;
-    let uhf_tag = parse_optional::<UhfTag>(row, columns.uhf_tag, AnimalColumn::UhfTag)?;
-    let uhf_tag_visual =
-        parse_optional::<UhfTagVisual>(row, columns.uhf_tag_visual, AnimalColumn::UhfTagVisual)?;
+    let tip_tag = parse_optional_tag::<TipTag>(row, columns.tip_tag, AnimalColumn::TipTag)?;
+    let uhf_tag = parse_optional_tag::<UhfTag>(row, columns.uhf_tag, AnimalColumn::UhfTag)?;
+    let uhf_tag_visual = parse_optional_tag::<UhfTagVisual>(
+        row,
+        columns.uhf_tag_visual,
+        AnimalColumn::UhfTagVisual,
+    )?;
     let sex = parse_sex(cell(row, columns.sex))?;
     let life_stage_override = parse_life_stage(cell(row, columns.life_stage_override))?;
     let lambing_id = parse_optional::<LambingId>(row, columns.lambing_id, AnimalColumn::LambingId)?;
@@ -274,7 +303,7 @@ mod tests {
 
     fn complete_animal() -> Animal {
         let animal = AnimalData {
-            tag: Some("00042".parse().unwrap()),
+            tag: Some("000000000000042".parse().unwrap()),
             comment: Some("Needs checking".to_owned()),
             tip_tag: Some("TIP-42".parse().unwrap()),
             uhf_tag: Some("E2000017221101441890ABCD".parse().unwrap()),
@@ -348,7 +377,7 @@ mod tests {
         let columns = find_animal_columns(&headers()).expect("headers are valid");
         let row = cells(&[
             ANIMAL_1,
-            " 00042 ",
+            " 000000000000042 ",
             "TIP-42",
             "E2000017221101441890ABCD",
             "UHF-42",
@@ -434,19 +463,19 @@ mod tests {
     fn parse_rows_keeps_valid_animals_and_reports_bad_row_location() {
         let rows = vec![
             headers(),
-            cells(&[ANIMAL_1, "00042", "", "", "", "M", "", "", ""]),
-            cells(&["", "00099", "", "", "", "F", "", "", ""]),
-            cells(&[ANIMAL_2, "00100", "", "", "", "F", "", "", ""]),
+            cells(&[ANIMAL_1, "000000000000042", "", "", "", "M", "", "", ""]),
+            cells(&["", "000000000000099", "", "", "", "F", "", "", ""]),
+            cells(&[ANIMAL_2, "000000000000100", "", "", "", "F", "", "", ""]),
         ];
 
         let first = AnimalData {
-            tag: Some("00042".parse().unwrap()),
+            tag: Some("000000000000042".parse().unwrap()),
             sex: Sex::Male,
             ..AnimalData::default()
         };
 
         let second = AnimalData {
-            tag: Some("00100".parse().unwrap()),
+            tag: Some("000000000000100".parse().unwrap()),
             sex: Sex::Female,
             ..AnimalData::default()
         };
@@ -487,9 +516,9 @@ mod tests {
     fn trims_id_and_tag_and_preserves_leading_zeros() {
         let columns = find_animal_columns(&headers()).expect("valid headers");
         let padded_id = format!(" {ANIMAL_1} ");
-        let row = cells(&[&padded_id, " 00042 "]);
+        let row = cells(&[&padded_id, " 000000000000042 "]);
         let expected = AnimalData {
-            tag: Some("00042".parse().unwrap()),
+            tag: Some("000000000000042".parse().unwrap()),
             ..AnimalData::default()
         };
 
@@ -539,9 +568,9 @@ mod tests {
     fn audit_locations_survive_rejected_rows_and_duplicate_ids() {
         let parsed = parse_animal_rows(&[
             headers(),
-            cells(&[ANIMAL_1, "00042"]),
+            cells(&[ANIMAL_1, "000000000000042"]),
             cells(&["invalid-id"]),
-            cells(&[ANIMAL_1, "00042"]),
+            cells(&[ANIMAL_1, "000000000000042"]),
         ])
         .unwrap();
         assert_eq!(parsed.row_errors.len(), 1);
@@ -555,5 +584,48 @@ mod tests {
                 .collect();
             assert_eq!(rows, [2, 4]);
         }
+    }
+    #[test]
+    fn invalid_tag_reports_reason_value_and_sheet_row() {
+        for (value, reason) in [
+            (
+                "00042",
+                TagParseError::InvalidLength {
+                    expected: 15,
+                    actual: 5,
+                },
+            ),
+            ("25002922812243X", TagParseError::NonDigit),
+        ] {
+            let parsed = parse_animal_rows(&[headers(), cells(&[ANIMAL_1, value])]).unwrap();
+            assert!(parsed.animals.is_empty());
+            assert_eq!(
+                parsed.row_errors,
+                vec![LocatedRowError {
+                    row_number: 2,
+                    error: RowError::InvalidTag {
+                        field: AnimalColumn::Tag,
+                        value: value.into(),
+                        reason
+                    },
+                }]
+            );
+        }
+    }
+
+    #[test]
+    fn sheet_audit_detects_uhf_duplicates_ignoring_case() {
+        let parsed = parse_animal_rows(&[
+            headers(),
+            cells(&[ANIMAL_1, "250029228122437", "tip", "abc", "visual"]),
+            cells(&[ANIMAL_2, "250029228122438", "TIP", "AbC", "VISUAL"]),
+        ])
+        .unwrap();
+        assert!(parsed.row_errors.is_empty());
+        let report = flockwell_domain::audit_animals(&parsed.animals);
+        assert_eq!(report.issues().len(), 1);
+        assert!(
+            matches!(&report.issues()[0], flockwell_domain::AuditIssue::DuplicateUhfTag { tag, .. } if tag.as_str() == "ABC")
+        );
     }
 }

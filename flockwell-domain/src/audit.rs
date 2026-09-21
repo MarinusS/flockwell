@@ -1,4 +1,5 @@
 //! Pure collection checks. Uniqueness applies to all supplied animals, per field.
+use crate::uniqueness::{UniqueTag, unique_tags};
 use crate::{Animal, AnimalId, Tag, UhfTag};
 use std::collections::BTreeMap;
 
@@ -49,13 +50,13 @@ impl AuditReport {
     }
 }
 
-fn duplicates<K: Ord>(
+fn duplicates<K: Ord, I: IntoIterator<Item = K>>(
     animals: &[Animal],
-    key: impl Fn(&Animal) -> Option<K>,
+    keys: impl Fn(&Animal) -> I,
 ) -> Vec<(K, Vec<RecordRef>)> {
     let mut groups = BTreeMap::<K, Vec<RecordRef>>::new();
     for (index, animal) in animals.iter().enumerate() {
-        if let Some(key) = key(animal) {
+        for key in keys(animal) {
             groups.entry(key).or_default().push(RecordRef {
                 index,
                 animal_id: animal.id(),
@@ -84,14 +85,12 @@ pub fn audit_animals(animals: &[Animal]) -> AuditReport {
             .map(|(id, records)| AuditIssue::DuplicateId { id, records }),
     );
     issues.extend(
-        duplicates(animals, |a| a.tag().cloned())
+        duplicates(animals, |a| unique_tags(a.data()))
             .into_iter()
-            .map(|(tag, records)| AuditIssue::DuplicateTag { tag, records }),
-    );
-    issues.extend(
-        duplicates(animals, |a| a.uhf_tag().cloned())
-            .into_iter()
-            .map(|(tag, records)| AuditIssue::DuplicateUhfTag { tag, records }),
+            .map(|(tag, records)| match tag {
+                UniqueTag::Tag(tag) => AuditIssue::DuplicateTag { tag, records },
+                UniqueTag::UhfTag(tag) => AuditIssue::DuplicateUhfTag { tag, records },
+            }),
     );
     AuditReport { issues }
 }
@@ -119,8 +118,8 @@ mod tests {
             !audit_animals(&[
                 animal(1, None, None),
                 animal(2, None, None),
-                animal(3, Some("001"), Some("ABC")),
-                animal(4, Some("002"), Some("DEF")),
+                animal(3, Some("000000000000001"), Some("ABC")),
+                animal(4, Some("000000000000002"), Some("DEF")),
             ])
             .has_errors()
         );
@@ -128,7 +127,10 @@ mod tests {
 
     #[test]
     fn duplicate_ids_keep_distinct_source_positions() {
-        let animals = [animal(1, Some("a"), None), animal(1, Some("b"), None)];
+        let animals = [
+            animal(1, Some("000000000000001"), None),
+            animal(1, Some("000000000000002"), None),
+        ];
         let report = audit_animals(&animals);
         assert_eq!(
             report.issues(),
@@ -151,18 +153,18 @@ mod tests {
     #[test]
     fn tags_and_uhf_report_all_owners_in_stable_order() {
         let animals = [
-            animal(3, Some("002"), Some("X")),
-            animal(2, Some("001"), Some("X")),
-            animal(1, Some("001"), Some("X")),
-            animal(4, Some("002"), None),
+            animal(3, Some("000000000000002"), Some("X")),
+            animal(2, Some("000000000000001"), Some("X")),
+            animal(1, Some("000000000000001"), Some("X")),
+            animal(4, Some("000000000000002"), None),
         ];
         let report = audit_animals(&animals);
         assert_eq!(report.issues().len(), 3);
         assert!(
-            matches!(&report.issues()[0], AuditIssue::DuplicateTag { tag, .. } if tag.as_str() == "001")
+            matches!(&report.issues()[0], AuditIssue::DuplicateTag { tag, .. } if tag.as_str() == "000000000000001")
         );
         assert!(
-            matches!(&report.issues()[1], AuditIssue::DuplicateTag { tag, .. } if tag.as_str() == "002")
+            matches!(&report.issues()[1], AuditIssue::DuplicateTag { tag, .. } if tag.as_str() == "000000000000002")
         );
         assert!(
             matches!(&report.issues()[2], AuditIssue::DuplicateUhfTag { tag, .. } if tag.as_str() == "X")
@@ -190,15 +192,18 @@ mod tests {
     #[test]
     fn normalization_is_shared_and_namespaces_are_separate() {
         assert!(
-            audit_animals(&[animal(1, Some(" 001 "), None), animal(2, Some("001"), None)])
-                .has_errors()
+            audit_animals(&[
+                animal(1, Some(" 000000000000001 "), None),
+                animal(2, Some("000000000000001"), None)
+            ])
+            .has_errors()
         );
         assert!(
             !audit_animals(&[
-                animal(1, Some("001"), Some("ABC")),
-                animal(2, Some("ABC"), Some("001")),
-                animal(3, Some("abc"), Some("abc")),
-                animal(4, Some("1"), None)
+                animal(1, Some("000000000000001"), Some("ABC")),
+                animal(2, Some("000000000000002"), Some("000000000000001")),
+                animal(3, Some("000000000000003"), Some("DEF")),
+                animal(4, Some("000000000000004"), None)
             ])
             .has_errors()
         );
@@ -207,8 +212,8 @@ mod tests {
     #[test]
     fn reports_all_conflict_kinds_together() {
         let report = audit_animals(&[
-            animal(1, Some("a"), Some("b")),
-            animal(1, Some("a"), Some("b")),
+            animal(1, Some("000000000000001"), Some("b")),
+            animal(1, Some("000000000000001"), Some("b")),
         ]);
         assert_eq!(report.issues().len(), 3);
         assert!(report.has_errors());

@@ -3,19 +3,28 @@ use std::{fmt, str::FromStr};
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum TagParseError {
     Empty,
+    InvalidLength { expected: usize, actual: usize },
+    NonDigit,
 }
 
 impl fmt::Display for TagParseError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        f.write_str("tag must not be blank")
+        match self {
+            Self::Empty => f.write_str("tag must not be blank"),
+            Self::InvalidLength { expected, actual } => write!(
+                f,
+                "tag must contain {expected} digits, got {actual} characters"
+            ),
+            Self::NonDigit => f.write_str("tag must contain only ASCII digits (0-9)"),
+        }
     }
 }
 
 impl std::error::Error for TagParseError {}
 
 macro_rules! tag_type {
-    ($name:ident) => {
-        /// A nonempty, trimmed identifier. Case and leading zeros are preserved.
+    ($(#[$meta:meta])* $name:ident, $normalize:ident) => {
+        $(#[$meta])*
         #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
         pub struct $name(String);
 
@@ -33,7 +42,7 @@ macro_rules! tag_type {
                 if value.is_empty() {
                     return Err(TagParseError::Empty);
                 }
-                Ok(Self(value.to_owned()))
+                Ok(Self($normalize(value)?))
             }
         }
 
@@ -53,21 +62,104 @@ macro_rules! tag_type {
     };
 }
 
-tag_type!(Tag);
-tag_type!(TipTag);
-tag_type!(UhfTag);
-tag_type!(UhfTagVisual);
+fn numeric_tag(value: &str) -> Result<String, TagParseError> {
+    if !value.bytes().all(|byte| byte.is_ascii_digit()) {
+        return Err(TagParseError::NonDigit);
+    }
+    if value.len() != Tag::LENGTH {
+        return Err(TagParseError::InvalidLength {
+            expected: Tag::LENGTH,
+            actual: value.len(),
+        });
+    }
+    Ok(value.to_owned())
+}
+
+fn case_insensitive_tag(value: &str) -> Result<String, TagParseError> {
+    Ok(value.to_uppercase())
+}
+
+tag_type!(
+    /// Exactly 15 ASCII digits, trimmed, with leading zeros preserved.
+    Tag, numeric_tag
+);
+impl Tag {
+    pub const LENGTH: usize = 15;
+}
+tag_type!(
+    /// A nonblank, trimmed identifier stored in uppercase. Duplicates are allowed for now.
+    TipTag, case_insensitive_tag
+);
+tag_type!(
+    /// A nonblank, trimmed identifier stored in uppercase for case-insensitive uniqueness.
+    UhfTag, case_insensitive_tag
+);
+tag_type!(
+    /// A nonblank, trimmed identifier stored in uppercase. Does not require uniqueness.
+    UhfTagVisual, case_insensitive_tag
+);
 
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::collections::{BTreeSet, HashSet};
 
     #[test]
-    fn normalization_preserves_case_and_leading_zeros() {
-        assert_eq!(" 000aB ".parse::<Tag>().unwrap().as_str(), "000aB");
-        assert_eq!(" TIP-01 ".parse::<TipTag>().unwrap().as_str(), "TIP-01");
-        assert_eq!(" 00aB ".parse::<UhfTag>().unwrap().as_str(), "00aB");
-        assert_eq!(" 0001 ".parse::<UhfTagVisual>().unwrap().as_str(), "0001");
+    fn numeric_tag_accepts_example_and_preserves_leading_zeros() {
+        assert_eq!(
+            "250029228122437".parse::<Tag>().unwrap().as_str(),
+            "250029228122437"
+        );
+        assert_eq!(
+            " 000000000000042 ".parse::<Tag>().unwrap().as_str(),
+            "000000000000042"
+        );
+    }
+
+    #[test]
+    fn numeric_tag_rejects_wrong_lengths_and_non_digits() {
+        for (input, actual) in [
+            ("00042", 5),
+            ("25002922812243", 14),
+            ("2500292281224370", 16),
+        ] {
+            assert_eq!(
+                input.parse::<Tag>(),
+                Err(TagParseError::InvalidLength {
+                    expected: 15,
+                    actual
+                })
+            );
+        }
+        for input in [
+            "25002922812243X",
+            "250029 28122437",
+            "+50029228122437",
+            "２５００２９２２８１２２４３７",
+        ] {
+            assert_eq!(input.parse::<Tag>(), Err(TagParseError::NonDigit));
+        }
+    }
+
+    #[test]
+    fn other_tags_normalize_case_without_format_restrictions() {
+        assert_eq!(" tip-01 ".parse::<TipTag>().unwrap().as_str(), "TIP-01");
+        assert_eq!(" 00aB ".parse::<UhfTag>().unwrap().as_str(), "00AB");
+        assert_eq!(
+            " visual label ".parse::<UhfTagVisual>().unwrap().as_str(),
+            "VISUAL LABEL"
+        );
+        assert_eq!("tip".parse::<TipTag>(), "TIP".parse::<TipTag>());
+        assert_eq!(
+            "visual".parse::<UhfTagVisual>(),
+            "VISUAL".parse::<UhfTagVisual>()
+        );
+        let tags = [
+            "abc".parse::<UhfTag>().unwrap(),
+            "ABC".parse::<UhfTag>().unwrap(),
+        ];
+        assert_eq!(tags.iter().collect::<HashSet<_>>().len(), 1);
+        assert_eq!(tags.iter().collect::<BTreeSet<_>>().len(), 1);
     }
 
     #[test]

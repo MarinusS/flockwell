@@ -32,14 +32,14 @@ impl std::error::Error for UuidV7ParseError {
     }
 }
 
-#[derive(Debug, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Sex {
     Male,
     Female,
     Unknown,
 }
 
-#[derive(Debug, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub enum LifeStage {
     Lamb,
     Adult,
@@ -51,10 +51,10 @@ pub enum LifeStage {
 /// use flockwell_domain::{Animal, AnimalData};
 /// let id = "00000000-0000-7000-8000-000000000001".parse()?;
 /// let animal = Animal::from_data(id, AnimalData {
-///     tag: Some(" 00042 ".parse()?),
+///     tag: Some(" 000000000000042 ".parse()?),
 ///     ..AnimalData::default()
 /// });
-/// assert_eq!(animal.tag().unwrap().as_str(), "00042");
+/// assert_eq!(animal.tag().unwrap().as_str(), "000000000000042");
 /// # Ok::<(), Box<dyn std::error::Error>>(())
 /// ```
 ///
@@ -71,7 +71,7 @@ pub struct Animal {
 }
 
 /// Typed values used to construct an animal. Does not assert uniqueness.
-#[derive(Debug, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct AnimalData {
     pub tag: Option<Tag>,
     pub comment: Option<String>,
