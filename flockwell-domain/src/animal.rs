@@ -84,10 +84,12 @@ pub struct AnimalData {
     pub disposition_id: Option<DispositionId>,
 }
 
-fn parse_uuid_v7(value: &str) -> Result<Uuid, UuidV7ParseError> {
-    let uuid = Uuid::parse_str(value).map_err(UuidV7ParseError::InvalidUuid)?;
-
+fn validate_uuid_v7(uuid: Uuid) -> Result<Uuid, UuidV7ParseError> {
     if uuid.get_version_num() != 7 {
+        return Err(UuidV7ParseError::NotUuidV7);
+    }
+
+    if uuid.get_variant() != uuid::Variant::RFC4122 {
         return Err(UuidV7ParseError::NotUuidV7);
     }
 
@@ -96,11 +98,7 @@ fn parse_uuid_v7(value: &str) -> Result<Uuid, UuidV7ParseError> {
 
 impl AnimalId {
     pub fn from_uuid(value: Uuid) -> Result<Self, UuidV7ParseError> {
-        if value.get_version_num() != 7 {
-            return Err(UuidV7ParseError::NotUuidV7);
-        }
-
-        Ok(Self(value))
+        Ok(Self(validate_uuid_v7(value)?))
     }
 }
 
@@ -108,7 +106,8 @@ impl std::str::FromStr for AnimalId {
     type Err = UuidV7ParseError;
 
     fn from_str(value: &str) -> Result<Self, Self::Err> {
-        Ok(Self(parse_uuid_v7(value)?))
+        let uuid = Uuid::parse_str(value).map_err(UuidV7ParseError::InvalidUuid)?;
+        Self::from_uuid(uuid)
     }
 }
 
@@ -120,11 +119,7 @@ impl std::fmt::Display for AnimalId {
 
 impl LambingId {
     pub fn from_uuid(value: Uuid) -> Result<Self, UuidV7ParseError> {
-        if value.get_version_num() != 7 {
-            return Err(UuidV7ParseError::NotUuidV7);
-        }
-
-        Ok(Self(value))
+        Ok(Self(validate_uuid_v7(value)?))
     }
 }
 
@@ -132,7 +127,8 @@ impl std::str::FromStr for LambingId {
     type Err = UuidV7ParseError;
 
     fn from_str(value: &str) -> Result<Self, Self::Err> {
-        Ok(Self(parse_uuid_v7(value)?))
+        let uuid = Uuid::parse_str(value).map_err(UuidV7ParseError::InvalidUuid)?;
+        Self::from_uuid(uuid)
     }
 }
 
@@ -144,11 +140,7 @@ impl std::fmt::Display for LambingId {
 
 impl DispositionId {
     pub fn from_uuid(value: Uuid) -> Result<Self, UuidV7ParseError> {
-        if value.get_version_num() != 7 {
-            return Err(UuidV7ParseError::NotUuidV7);
-        }
-
-        Ok(Self(value))
+        Ok(Self(validate_uuid_v7(value)?))
     }
 }
 
@@ -156,7 +148,8 @@ impl std::str::FromStr for DispositionId {
     type Err = UuidV7ParseError;
 
     fn from_str(value: &str) -> Result<Self, Self::Err> {
-        Ok(Self(parse_uuid_v7(value)?))
+        let uuid = Uuid::parse_str(value).map_err(UuidV7ParseError::InvalidUuid)?;
+        Self::from_uuid(uuid)
     }
 }
 
@@ -302,5 +295,88 @@ mod tests {
         assert_eq!(animal.data.life_stage_override, None);
         assert_eq!(animal.data.lambing_id, None);
         assert_eq!(animal.data.disposition_id, None);
+    }
+
+    #[test]
+    fn animal_id_rejects_non_rfc4122_variants_from_str() {
+        let invalid_variants = [
+            "00000000-0000-7000-0000-000000000001", // NCS
+            "00000000-0000-7000-c000-000000000001", // Microsoft
+            "00000000-0000-7000-e000-000000000001", // Future
+        ];
+
+        for value in invalid_variants {
+            assert!(
+                matches!(AnimalId::from_str(value), Err(UuidV7ParseError::NotUuidV7)),
+                "{value} should be rejected"
+            );
+        }
+    }
+
+    #[test]
+    fn animal_id_accepts_rfc4122_variant_from_str() {
+        let valid_variants = [
+            "00000000-0000-7000-8000-000000000001",
+            "00000000-0000-7000-9000-000000000001",
+            "00000000-0000-7000-a000-000000000001",
+            "00000000-0000-7000-b000-000000000001",
+        ];
+
+        for value in valid_variants {
+            assert!(
+                AnimalId::from_str(value).is_ok(),
+                "{value} should be accepted as RFC4122 UUIDv7"
+            );
+        }
+    }
+
+    #[test]
+    fn animal_id_rejects_non_rfc4122_variants_from_uuid() {
+        let invalid_variants = [
+            "00000000-0000-7000-0000-000000000001", // NCS
+            "00000000-0000-7000-c000-000000000001", // Microsoft
+            "00000000-0000-7000-e000-000000000001", // Future
+        ];
+
+        for value in invalid_variants {
+            let uuid = Uuid::parse_str(value).expect("test UUID should be syntactically valid");
+
+            assert!(
+                matches!(AnimalId::from_uuid(uuid), Err(UuidV7ParseError::NotUuidV7)),
+                "{value} should be rejected"
+            );
+        }
+    }
+
+    #[test]
+    fn related_ids_reject_non_rfc4122_variants() {
+        let invalid_variants = [
+            "00000000-0000-7000-0000-000000000001", // NCS
+            "00000000-0000-7000-c000-000000000001", // Microsoft
+            "00000000-0000-7000-e000-000000000001", // Future
+        ];
+
+        for value in invalid_variants {
+            assert!(
+                matches!(LambingId::from_str(value), Err(UuidV7ParseError::NotUuidV7)),
+                "LambingId should reject {value}"
+            );
+
+            assert!(
+                matches!(
+                    DispositionId::from_str(value),
+                    Err(UuidV7ParseError::NotUuidV7)
+                ),
+                "DispositionId should reject {value}"
+            );
+        }
+    }
+
+    #[test]
+    fn related_ids_accept_rfc4122_uuid_v7() {
+        let value = "00000000-0000-7000-8000-000000000001";
+
+        assert!(LambingId::from_str(value).is_ok());
+        assert!(DispositionId::from_str(value).is_ok());
     }
 }
