@@ -1,6 +1,9 @@
 use std::str::FromStr;
 
-use flockwell_domain::{Animal, AnimalId, DispositionId, LambingId, LifeStage, Sex};
+use flockwell_domain::{
+    Animal, AnimalData, AnimalId, DispositionId, LambingId, LifeStage, Sex, Tag, TipTag, UhfTag,
+    UhfTagVisual,
+};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum AnimalColumn {
@@ -46,13 +49,8 @@ pub enum HeaderError {
 
 #[derive(Debug, PartialEq, Eq)]
 pub enum RowError {
-    MissingRequiredValue {
-        field: AnimalColumn,
-    },
-    InvalidValue {
-        field: AnimalColumn,
-        value: String,
-    },
+    MissingRequiredValue { field: AnimalColumn },
+    InvalidValue { field: AnimalColumn, value: String },
 }
 
 #[derive(Debug, PartialEq, Eq)]
@@ -78,6 +76,7 @@ struct AnimalColumns {
 #[derive(Debug, PartialEq, Eq)]
 pub struct ParsedAnimals {
     pub(crate) animals: Vec<Animal>,
+    pub(crate) source_rows: Vec<usize>,
     pub(crate) row_errors: Vec<LocatedRowError>,
 }
 
@@ -121,11 +120,7 @@ fn cell(row: &[String], column: usize) -> Option<&str> {
         .filter(|value| !value.is_empty())
 }
 
-fn parse_required<T>(
-    row: &[String],
-    column: usize,
-    field: AnimalColumn,
-) -> Result<T, RowError>
+fn parse_required<T>(row: &[String], column: usize, field: AnimalColumn) -> Result<T, RowError>
 where
     T: FromStr,
 {
@@ -149,13 +144,10 @@ where
         return Ok(None);
     };
 
-    value
-        .parse()
-        .map(Some)
-        .map_err(|_| RowError::InvalidValue {
-            field,
-            value: value.to_owned(),
-        })
+    value.parse().map(Some).map_err(|_| RowError::InvalidValue {
+        field,
+        value: value.to_owned(),
+    })
 }
 
 fn parse_sex(value: Option<&str>) -> Result<Sex, RowError> {
@@ -191,32 +183,32 @@ fn parse_life_stage(value: Option<&str>) -> Result<Option<LifeStage>, RowError> 
 
 fn parse_animal_row(row: &[String], columns: &AnimalColumns) -> Result<Animal, RowError> {
     let id = parse_required::<AnimalId>(row, columns.id, AnimalColumn::Id)?;
-    let tag = cell(row, columns.tag).map(str::to_owned);
+    let tag = parse_optional::<Tag>(row, columns.tag, AnimalColumn::Tag)?;
     let comment = cell(row, columns.comment).map(str::to_owned);
-    let tip_tag = cell(row, columns.tip_tag).map(str::to_owned);
-    let uhf_tag = cell(row, columns.uhf_tag).map(str::to_owned);
-    let uhf_tag_visual = cell(row, columns.uhf_tag_visual).map(str::to_owned);
+    let tip_tag = parse_optional::<TipTag>(row, columns.tip_tag, AnimalColumn::TipTag)?;
+    let uhf_tag = parse_optional::<UhfTag>(row, columns.uhf_tag, AnimalColumn::UhfTag)?;
+    let uhf_tag_visual =
+        parse_optional::<UhfTagVisual>(row, columns.uhf_tag_visual, AnimalColumn::UhfTagVisual)?;
     let sex = parse_sex(cell(row, columns.sex))?;
     let life_stage_override = parse_life_stage(cell(row, columns.life_stage_override))?;
     let lambing_id = parse_optional::<LambingId>(row, columns.lambing_id, AnimalColumn::LambingId)?;
-    let disposition_id = parse_optional::<DispositionId>(
-        row,
-        columns.disposition_id,
-        AnimalColumn::DispositionId,
-    )?;
+    let disposition_id =
+        parse_optional::<DispositionId>(row, columns.disposition_id, AnimalColumn::DispositionId)?;
 
-    Ok(Animal {
+    Ok(Animal::from_data(
         id,
-        tag,
-        comment,
-        tip_tag,
-        uhf_tag,
-        uhf_tag_visual,
-        sex,
-        life_stage_override,
-        lambing_id,
-        disposition_id,
-    })
+        AnimalData {
+            tag,
+            comment,
+            tip_tag,
+            uhf_tag,
+            uhf_tag_visual,
+            sex,
+            life_stage_override,
+            lambing_id,
+            disposition_id,
+        },
+    ))
 }
 
 pub fn parse_animal_rows(rows: &[Vec<String>]) -> Result<ParsedAnimals, HeaderError> {
@@ -225,18 +217,23 @@ pub fn parse_animal_rows(rows: &[Vec<String>]) -> Result<ParsedAnimals, HeaderEr
 
     let mut animals = Vec::new();
     let mut errors = Vec::new();
+    let mut source_rows = Vec::new();
 
     for (index, row) in rows.iter().enumerate().skip(1) {
         let row_number = index + 1;
 
         match parse_animal_row(row, &columns) {
-            Ok(animal) => animals.push(animal),
+            Ok(animal) => {
+                animals.push(animal);
+                source_rows.push(row_number);
+            }
             Err(error) => errors.push(LocatedRowError { row_number, error }),
         }
     }
 
     Ok(ParsedAnimals {
         animals,
+        source_rows,
         row_errors: errors,
     })
 }
@@ -276,21 +273,18 @@ mod tests {
     }
 
     fn complete_animal() -> Animal {
-        let mut animal = empty_animal(ANIMAL_1);
-        animal.tag = Some("00042".to_owned());
-        animal.comment = Some("Needs checking".to_owned());
-        animal.tip_tag = Some("TIP-42".to_owned());
-        animal.uhf_tag = Some("E2000017221101441890ABCD".to_owned());
-        animal.uhf_tag_visual = Some("UHF-42".to_owned());
-        animal.sex = Sex::Female;
-        animal.life_stage_override = Some(LifeStage::Lamb);
-        animal.lambing_id = Some(LAMBING_1.parse().expect("valid lambing UUIDv7"));
-        animal.disposition_id = Some(
-            DISPOSITION_1
-                .parse()
-                .expect("valid disposition UUIDv7"),
-        );
-        animal
+        let animal = AnimalData {
+            tag: Some("00042".parse().unwrap()),
+            comment: Some("Needs checking".to_owned()),
+            tip_tag: Some("TIP-42".parse().unwrap()),
+            uhf_tag: Some("E2000017221101441890ABCD".parse().unwrap()),
+            uhf_tag_visual: Some("UHF-42".parse().unwrap()),
+            sex: Sex::Female,
+            life_stage_override: Some(LifeStage::Lamb),
+            lambing_id: Some(LAMBING_1.parse().expect("valid lambing UUIDv7")),
+            disposition_id: Some(DISPOSITION_1.parse().expect("valid disposition UUIDv7")),
+        };
+        Animal::from_data(ANIMAL_1.parse().unwrap(), animal)
     }
 
     #[test]
@@ -425,9 +419,7 @@ mod tests {
     fn invalid_uuid_versions_are_rejected_for_persisted_ids() {
         let columns = find_animal_columns(&headers()).expect("headers are valid");
         let non_v7 = "00000000-0000-4000-8000-000000000021";
-        let row = cells(&[
-            ANIMAL_1, "", "", "", "", "", "", non_v7, "",
-        ]);
+        let row = cells(&[ANIMAL_1, "", "", "", "", "", "", non_v7, ""]);
 
         assert_eq!(
             parse_animal_row(&row, &columns),
@@ -447,18 +439,26 @@ mod tests {
             cells(&[ANIMAL_2, "00100", "", "", "", "F", "", "", ""]),
         ];
 
-        let mut first = empty_animal(ANIMAL_1);
-        first.tag = Some("00042".to_owned());
-        first.sex = Sex::Male;
+        let first = AnimalData {
+            tag: Some("00042".parse().unwrap()),
+            sex: Sex::Male,
+            ..AnimalData::default()
+        };
 
-        let mut second = empty_animal(ANIMAL_2);
-        second.tag = Some("00100".to_owned());
-        second.sex = Sex::Female;
+        let second = AnimalData {
+            tag: Some("00100".parse().unwrap()),
+            sex: Sex::Female,
+            ..AnimalData::default()
+        };
 
         assert_eq!(
             parse_animal_rows(&rows),
             Ok(ParsedAnimals {
-                animals: vec![first, second],
+                animals: vec![
+                    Animal::from_data(ANIMAL_1.parse().unwrap(), first),
+                    Animal::from_data(ANIMAL_2.parse().unwrap(), second)
+                ],
+                source_rows: vec![2, 4],
                 row_errors: vec![LocatedRowError {
                     row_number: 3,
                     error: RowError::MissingRequiredValue {
@@ -488,10 +488,15 @@ mod tests {
         let columns = find_animal_columns(&headers()).expect("valid headers");
         let padded_id = format!(" {ANIMAL_1} ");
         let row = cells(&[&padded_id, " 00042 "]);
-        let mut expected = empty_animal(ANIMAL_1);
-        expected.tag = Some("00042".to_owned());
+        let expected = AnimalData {
+            tag: Some("00042".parse().unwrap()),
+            ..AnimalData::default()
+        };
 
-        assert_eq!(parse_animal_row(&row, &columns), Ok(expected));
+        assert_eq!(
+            parse_animal_row(&row, &columns),
+            Ok(Animal::from_data(ANIMAL_1.parse().unwrap(), expected))
+        );
     }
 
     #[test]
@@ -502,6 +507,7 @@ mod tests {
             parse_animal_rows(&rows),
             Ok(ParsedAnimals {
                 animals: vec![empty_animal(ANIMAL_1)],
+                source_rows: vec![3],
                 row_errors: vec![LocatedRowError {
                     row_number: 2,
                     error: RowError::InvalidValue {
@@ -528,5 +534,26 @@ mod tests {
         row[columns.comment] = "   ".to_owned();
 
         assert_eq!(parse_animal_row(&row, &columns), Ok(empty_animal(ANIMAL_1)));
+    }
+    #[test]
+    fn audit_locations_survive_rejected_rows_and_duplicate_ids() {
+        let parsed = parse_animal_rows(&[
+            headers(),
+            cells(&[ANIMAL_1, "00042"]),
+            cells(&["invalid-id"]),
+            cells(&[ANIMAL_1, "00042"]),
+        ])
+        .unwrap();
+        assert_eq!(parsed.row_errors.len(), 1);
+        let report = flockwell_domain::audit_animals(&parsed.animals);
+        assert_eq!(report.issues().len(), 2);
+        for issue in report.issues() {
+            let rows: Vec<_> = issue
+                .records()
+                .iter()
+                .map(|record| parsed.source_rows[record.index])
+                .collect();
+            assert_eq!(rows, [2, 4]);
+        }
     }
 }

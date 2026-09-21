@@ -1,9 +1,12 @@
 mod animal;
+mod audit;
+mod tag;
 
-pub use animal::Animal;
-pub use animal::AnimalId;
-pub use animal::AnimalIdParseError;
-pub use animal::DispositionId;
-pub use animal::LambingId;
-pub use animal::LifeStage;
-pub use animal::Sex;
+pub use animal::{
+    Animal, AnimalData, AnimalId, DispositionId, LambingId, LifeStage, Sex, UuidV7ParseError,
+};
+pub use audit::{AuditIssue, AuditReport, RecordRef, audit_animals};
+pub use tag::{Tag, TagParseError, TipTag, UhfTag, UhfTagVisual};
+
+/// Compatibility alias for callers using the original ID error name.
+pub type AnimalIdParseError = UuidV7ParseError;

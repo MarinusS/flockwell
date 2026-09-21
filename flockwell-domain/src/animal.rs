@@ -1,3 +1,4 @@
+use crate::{Tag, TipTag, UhfTag, UhfTagVisual};
 use uuid::Uuid;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
@@ -8,12 +9,12 @@ pub struct LambingId(Uuid);
 pub struct DispositionId(Uuid);
 
 #[derive(Debug)]
-pub enum AnimalIdParseError {
+pub enum UuidV7ParseError {
     InvalidUuid(uuid::Error),
     NotUuidV7,
 }
 
-impl std::fmt::Display for AnimalIdParseError {
+impl std::fmt::Display for UuidV7ParseError {
     fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             Self::InvalidUuid(error) => write!(formatter, "invalid UUID: {error}"),
@@ -22,7 +23,7 @@ impl std::fmt::Display for AnimalIdParseError {
     }
 }
 
-impl std::error::Error for AnimalIdParseError {
+impl std::error::Error for UuidV7ParseError {
     fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
         match self {
             Self::InvalidUuid(error) => Some(error),
@@ -44,34 +45,59 @@ pub enum LifeStage {
     Adult,
 }
 
+/// Individually valid animal data; collection uniqueness is checked separately.
+///
+/// ```
+/// use flockwell_domain::{Animal, AnimalData};
+/// let id = "00000000-0000-7000-8000-000000000001".parse()?;
+/// let animal = Animal::from_data(id, AnimalData {
+///     tag: Some(" 00042 ".parse()?),
+///     ..AnimalData::default()
+/// });
+/// assert_eq!(animal.tag().unwrap().as_str(), "00042");
+/// # Ok::<(), Box<dyn std::error::Error>>(())
+/// ```
+///
+/// Tag namespaces cannot be mixed:
+/// ```compile_fail
+/// use flockwell_domain::{AnimalData, UhfTag};
+/// let uhf: UhfTag = "E200001".parse().unwrap();
+/// let data = AnimalData { tag: Some(uhf), ..AnimalData::default() };
+/// ```
 #[derive(Debug, PartialEq, Eq)]
 pub struct Animal {
-    pub id: AnimalId,
-    pub tag: Option<String>,
+    id: AnimalId,
+    data: AnimalData,
+}
+
+/// Typed values used to construct an animal. Does not assert uniqueness.
+#[derive(Debug, PartialEq, Eq)]
+pub struct AnimalData {
+    pub tag: Option<Tag>,
     pub comment: Option<String>,
-    pub tip_tag: Option<String>,
-    pub uhf_tag: Option<String>,
-    pub uhf_tag_visual: Option<String>,
+    pub tip_tag: Option<TipTag>,
+    pub uhf_tag: Option<UhfTag>,
+    pub uhf_tag_visual: Option<UhfTagVisual>,
     pub sex: Sex,
     pub life_stage_override: Option<LifeStage>,
     pub lambing_id: Option<LambingId>,
     pub disposition_id: Option<DispositionId>,
 }
 
-fn parse_uuid_v7(value: &str) -> Result<Uuid, AnimalIdParseError> {
-    let uuid = Uuid::parse_str(value).map_err(AnimalIdParseError::InvalidUuid)?;
+fn parse_uuid_v7(value: &str) -> Result<Uuid, UuidV7ParseError> {
+    let uuid = Uuid::parse_str(value).map_err(UuidV7ParseError::InvalidUuid)?;
 
     if uuid.get_version_num() != 7 {
-        return Err(AnimalIdParseError::NotUuidV7);
+        return Err(UuidV7ParseError::NotUuidV7);
     }
 
     Ok(uuid)
 }
 
 impl AnimalId {
-    pub fn from_uuid(value: Uuid) -> Result<Self, AnimalIdParseError> {
+    pub fn from_uuid(value: Uuid) -> Result<Self, UuidV7ParseError> {
         if value.get_version_num() != 7 {
-            return Err(AnimalIdParseError::NotUuidV7);
+            return Err(UuidV7ParseError::NotUuidV7);
         }
 
         Ok(Self(value))
@@ -79,7 +105,7 @@ impl AnimalId {
 }
 
 impl std::str::FromStr for AnimalId {
-    type Err = AnimalIdParseError;
+    type Err = UuidV7ParseError;
 
     fn from_str(value: &str) -> Result<Self, Self::Err> {
         Ok(Self(parse_uuid_v7(value)?))
@@ -93,9 +119,9 @@ impl std::fmt::Display for AnimalId {
 }
 
 impl LambingId {
-    pub fn from_uuid(value: Uuid) -> Result<Self, AnimalIdParseError> {
+    pub fn from_uuid(value: Uuid) -> Result<Self, UuidV7ParseError> {
         if value.get_version_num() != 7 {
-            return Err(AnimalIdParseError::NotUuidV7);
+            return Err(UuidV7ParseError::NotUuidV7);
         }
 
         Ok(Self(value))
@@ -103,7 +129,7 @@ impl LambingId {
 }
 
 impl std::str::FromStr for LambingId {
-    type Err = AnimalIdParseError;
+    type Err = UuidV7ParseError;
 
     fn from_str(value: &str) -> Result<Self, Self::Err> {
         Ok(Self(parse_uuid_v7(value)?))
@@ -117,9 +143,9 @@ impl std::fmt::Display for LambingId {
 }
 
 impl DispositionId {
-    pub fn from_uuid(value: Uuid) -> Result<Self, AnimalIdParseError> {
+    pub fn from_uuid(value: Uuid) -> Result<Self, UuidV7ParseError> {
         if value.get_version_num() != 7 {
-            return Err(AnimalIdParseError::NotUuidV7);
+            return Err(UuidV7ParseError::NotUuidV7);
         }
 
         Ok(Self(value))
@@ -127,7 +153,7 @@ impl DispositionId {
 }
 
 impl std::str::FromStr for DispositionId {
-    type Err = AnimalIdParseError;
+    type Err = UuidV7ParseError;
 
     fn from_str(value: &str) -> Result<Self, Self::Err> {
         Ok(Self(parse_uuid_v7(value)?))
@@ -140,10 +166,9 @@ impl std::fmt::Display for DispositionId {
     }
 }
 
-impl Animal {
-    pub fn new(id: AnimalId) -> Self {
+impl Default for AnimalData {
+    fn default() -> Self {
         Self {
-            id,
             tag: None,
             comment: None,
             tip_tag: None,
@@ -154,6 +179,60 @@ impl Animal {
             lambing_id: None,
             disposition_id: None,
         }
+    }
+}
+
+impl Animal {
+    pub fn new(id: AnimalId) -> Self {
+        Self::from_data(id, AnimalData::default())
+    }
+
+    pub fn from_data(id: AnimalId, data: AnimalData) -> Self {
+        Self { id, data }
+    }
+
+    pub fn id(&self) -> AnimalId {
+        self.id
+    }
+
+    pub fn data(&self) -> &AnimalData {
+        &self.data
+    }
+
+    pub fn tag(&self) -> Option<&Tag> {
+        self.data.tag.as_ref()
+    }
+
+    pub fn comment(&self) -> Option<&str> {
+        self.data.comment.as_deref()
+    }
+
+    pub fn tip_tag(&self) -> Option<&TipTag> {
+        self.data.tip_tag.as_ref()
+    }
+
+    pub fn uhf_tag(&self) -> Option<&UhfTag> {
+        self.data.uhf_tag.as_ref()
+    }
+
+    pub fn uhf_tag_visual(&self) -> Option<&UhfTagVisual> {
+        self.data.uhf_tag_visual.as_ref()
+    }
+
+    pub fn sex(&self) -> &Sex {
+        &self.data.sex
+    }
+
+    pub fn life_stage_override(&self) -> Option<&LifeStage> {
+        self.data.life_stage_override.as_ref()
+    }
+
+    pub fn lambing_id(&self) -> Option<&LambingId> {
+        self.data.lambing_id.as_ref()
+    }
+
+    pub fn disposition_id(&self) -> Option<&DispositionId> {
+        self.data.disposition_id.as_ref()
     }
 }
 
@@ -177,7 +256,7 @@ mod tests {
 
         assert!(matches!(
             AnimalId::from_str(value),
-            Err(AnimalIdParseError::NotUuidV7)
+            Err(UuidV7ParseError::NotUuidV7)
         ));
     }
 
@@ -185,7 +264,7 @@ mod tests {
     fn animal_id_rejects_invalid_uuid() {
         assert!(matches!(
             AnimalId::from_str("not-a-uuid"),
-            Err(AnimalIdParseError::InvalidUuid(_))
+            Err(UuidV7ParseError::InvalidUuid(_))
         ));
     }
 
@@ -198,11 +277,11 @@ mod tests {
         assert!(DispositionId::from_str(valid).is_ok());
         assert!(matches!(
             LambingId::from_str(invalid_version),
-            Err(AnimalIdParseError::NotUuidV7)
+            Err(UuidV7ParseError::NotUuidV7)
         ));
         assert!(matches!(
             DispositionId::from_str(invalid_version),
-            Err(AnimalIdParseError::NotUuidV7)
+            Err(UuidV7ParseError::NotUuidV7)
         ));
     }
 
@@ -214,14 +293,14 @@ mod tests {
         let animal = Animal::new(id);
 
         assert_eq!(animal.id, id);
-        assert_eq!(animal.tag, None);
-        assert_eq!(animal.comment, None);
-        assert_eq!(animal.tip_tag, None);
-        assert_eq!(animal.uhf_tag, None);
-        assert_eq!(animal.uhf_tag_visual, None);
-        assert_eq!(animal.sex, Sex::Unknown);
-        assert_eq!(animal.life_stage_override, None);
-        assert_eq!(animal.lambing_id, None);
-        assert_eq!(animal.disposition_id, None);
+        assert_eq!(animal.data.tag, None);
+        assert_eq!(animal.data.comment, None);
+        assert_eq!(animal.data.tip_tag, None);
+        assert_eq!(animal.data.uhf_tag, None);
+        assert_eq!(animal.data.uhf_tag_visual, None);
+        assert_eq!(animal.data.sex, Sex::Unknown);
+        assert_eq!(animal.data.life_stage_override, None);
+        assert_eq!(animal.data.lambing_id, None);
+        assert_eq!(animal.data.disposition_id, None);
     }
 }

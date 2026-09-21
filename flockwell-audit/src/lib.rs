@@ -1,3 +1,3 @@
 mod audit;
 
-pub use audit::{AuditReport, audit_animals};
+pub use audit::{AuditIssue, AuditReport, RecordRef, audit_animals};

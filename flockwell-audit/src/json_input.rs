@@ -1,7 +1,7 @@
 use std::error::Error;
 use std::path::Path;
 
-use flockwell_domain::{Animal, AnimalId};
+use flockwell_domain::{Animal, AnimalData, AnimalId};
 use std::str::FromStr;
 
 #[derive(serde::Deserialize)]
@@ -18,9 +18,20 @@ pub(crate) fn load_animals(path: &Path) -> Result<Vec<Animal>, Box<dyn Error>> {
         .into_iter()
         .map(|input| {
             let id = AnimalId::from_str(&input.id)?;
-            let mut animal = Animal::new(id);
-            animal.tag = input.tag;
-            Ok(animal)
+            let tag = input
+                .tag
+                .as_deref()
+                .map(str::trim)
+                .filter(|s| !s.is_empty())
+                .map(str::parse)
+                .transpose()?;
+            Ok(Animal::from_data(
+                id,
+                AnimalData {
+                    tag,
+                    ..AnimalData::default()
+                },
+            ))
         })
         .collect::<Result<Vec<_>, Box<dyn Error>>>()?;
 

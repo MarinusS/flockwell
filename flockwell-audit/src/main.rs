@@ -50,7 +50,14 @@ async fn main() -> ExitCode {
     let audit = audit_animals(&parsed.animals);
 
     if audit.has_errors() {
-        println!("{audit:#?}");
+        for issue in audit.issues() {
+            let rows: Vec<_> = issue
+                .records()
+                .iter()
+                .map(|record| parsed.source_rows[record.index])
+                .collect();
+            println!("Sheet rows {rows:?}: {issue:?}");
+        }
     }
 
     if has_row_errors {
