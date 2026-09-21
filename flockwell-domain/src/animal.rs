@@ -41,13 +41,14 @@ pub enum Sex {
 #[derive(Debug, PartialEq, Eq)]
 pub enum LifeStage {
     Lamb,
-    Sheep,
+    Adult,
 }
 
 #[derive(Debug, PartialEq, Eq)]
 pub struct Animal {
     pub id: AnimalId,
     pub tag: Option<String>,
+    pub comment: Option<String>,
     pub tip_tag: Option<String>,
     pub uhf_tag: Option<String>,
     pub uhf_tag_visual: Option<String>,
@@ -144,6 +145,7 @@ impl Animal {
         Self {
             id,
             tag: None,
+            comment: None,
             tip_tag: None,
             uhf_tag: None,
             uhf_tag_visual: None,
@@ -213,6 +215,7 @@ mod tests {
 
         assert_eq!(animal.id, id);
         assert_eq!(animal.tag, None);
+        assert_eq!(animal.comment, None);
         assert_eq!(animal.tip_tag, None);
         assert_eq!(animal.uhf_tag, None);
         assert_eq!(animal.uhf_tag_visual, None);

@@ -6,6 +6,7 @@ use flockwell_domain::{Animal, AnimalId, DispositionId, LambingId, LifeStage, Se
 pub enum AnimalColumn {
     Id,
     Tag,
+    Comment,
     TipTag,
     UhfTag,
     UhfTagVisual,
@@ -20,6 +21,7 @@ impl AnimalColumn {
         match self {
             Self::Id => "uuid_v7",
             Self::Tag => "tag",
+            Self::Comment => "comment",
             Self::TipTag => "tip tag",
             Self::UhfTag => "uhf tag",
             Self::UhfTagVisual => "uhf tag visual",
@@ -63,6 +65,7 @@ pub struct LocatedRowError {
 struct AnimalColumns {
     id: usize,
     tag: usize,
+    comment: usize,
     tip_tag: usize,
     uhf_tag: usize,
     uhf_tag_visual: usize,
@@ -101,6 +104,7 @@ fn find_animal_columns(headers: &[String]) -> Result<AnimalColumns, HeaderError>
     Ok(AnimalColumns {
         id: require_single_column(headers, AnimalColumn::Id)?,
         tag: require_single_column(headers, AnimalColumn::Tag)?,
+        comment: require_single_column(headers, AnimalColumn::Comment)?,
         tip_tag: require_single_column(headers, AnimalColumn::TipTag)?,
         uhf_tag: require_single_column(headers, AnimalColumn::UhfTag)?,
         uhf_tag_visual: require_single_column(headers, AnimalColumn::UhfTagVisual)?,
@@ -177,7 +181,7 @@ fn parse_life_stage(value: Option<&str>) -> Result<Option<LifeStage>, RowError> 
 
     match value.to_ascii_lowercase().as_str() {
         "lamb" => Ok(Some(LifeStage::Lamb)),
-        "sheep" => Ok(Some(LifeStage::Sheep)),
+        "sheep" | "adult" => Ok(Some(LifeStage::Adult)),
         _ => Err(RowError::InvalidValue {
             field: AnimalColumn::LifeStageOverride,
             value: value.to_owned(),
@@ -188,6 +192,7 @@ fn parse_life_stage(value: Option<&str>) -> Result<Option<LifeStage>, RowError> 
 fn parse_animal_row(row: &[String], columns: &AnimalColumns) -> Result<Animal, RowError> {
     let id = parse_required::<AnimalId>(row, columns.id, AnimalColumn::Id)?;
     let tag = cell(row, columns.tag).map(str::to_owned);
+    let comment = cell(row, columns.comment).map(str::to_owned);
     let tip_tag = cell(row, columns.tip_tag).map(str::to_owned);
     let uhf_tag = cell(row, columns.uhf_tag).map(str::to_owned);
     let uhf_tag_visual = cell(row, columns.uhf_tag_visual).map(str::to_owned);
@@ -203,6 +208,7 @@ fn parse_animal_row(row: &[String], columns: &AnimalColumns) -> Result<Animal, R
     Ok(Animal {
         id,
         tag,
+        comment,
         tip_tag,
         uhf_tag,
         uhf_tag_visual,
@@ -259,6 +265,7 @@ mod tests {
             AnimalColumn::LifeStageOverride,
             AnimalColumn::LambingId,
             AnimalColumn::DispositionId,
+            AnimalColumn::Comment,
         ]
         .map(|column| column.header().to_owned())
         .to_vec()
@@ -271,6 +278,7 @@ mod tests {
     fn complete_animal() -> Animal {
         let mut animal = empty_animal(ANIMAL_1);
         animal.tag = Some("00042".to_owned());
+        animal.comment = Some("Needs checking".to_owned());
         animal.tip_tag = Some("TIP-42".to_owned());
         animal.uhf_tag = Some("E2000017221101441890ABCD".to_owned());
         animal.uhf_tag_visual = Some("UHF-42".to_owned());
@@ -297,6 +305,7 @@ mod tests {
             "Life Stage Override",
             "tip tag",
             "UHF TAG",
+            " Comment ",
         ]);
 
         assert_eq!(
@@ -304,6 +313,7 @@ mod tests {
             Ok(AnimalColumns {
                 id: 3,
                 tag: 1,
+                comment: 9,
                 tip_tag: 7,
                 uhf_tag: 8,
                 uhf_tag_visual: 4,
@@ -334,7 +344,7 @@ mod tests {
             find_animal_columns(&headers),
             Err(HeaderError::DuplicateColumn {
                 column: AnimalColumn::Tag,
-                indices: vec![1, 9],
+                indices: vec![1, 10],
             }),
         );
     }
@@ -352,6 +362,7 @@ mod tests {
             "Lamb",
             LAMBING_1,
             DISPOSITION_1,
+            " Needs checking ",
         ]);
 
         assert_eq!(parse_animal_row(&row, &columns), Ok(complete_animal()));
@@ -389,10 +400,10 @@ mod tests {
     #[test]
     fn invalid_life_stage_is_reported_with_typed_field() {
         assert_eq!(
-            parse_life_stage(Some("adult")),
+            parse_life_stage(Some("invalid-stage")),
             Err(RowError::InvalidValue {
                 field: AnimalColumn::LifeStageOverride,
-                value: "adult".to_owned(),
+                value: "invalid-stage".to_owned(),
             }),
         );
     }
@@ -470,5 +481,52 @@ mod tests {
                 column: AnimalColumn::Sex,
             }),
         );
+    }
+
+    #[test]
+    fn trims_id_and_tag_and_preserves_leading_zeros() {
+        let columns = find_animal_columns(&headers()).expect("valid headers");
+        let padded_id = format!(" {ANIMAL_1} ");
+        let row = cells(&[&padded_id, " 00042 "]);
+        let mut expected = empty_animal(ANIMAL_1);
+        expected.tag = Some("00042".to_owned());
+
+        assert_eq!(parse_animal_row(&row, &columns), Ok(expected));
+    }
+
+    #[test]
+    fn malformed_id_preserves_value_and_row_location() {
+        let rows = vec![headers(), cells(&["not-a-uuid"]), cells(&[ANIMAL_1])];
+
+        assert_eq!(
+            parse_animal_rows(&rows),
+            Ok(ParsedAnimals {
+                animals: vec![empty_animal(ANIMAL_1)],
+                row_errors: vec![LocatedRowError {
+                    row_number: 2,
+                    error: RowError::InvalidValue {
+                        field: AnimalColumn::Id,
+                        value: "not-a-uuid".to_owned(),
+                    },
+                }],
+            }),
+        );
+    }
+
+    #[test]
+    fn adult_stage_accepts_existing_sheet_label() {
+        for value in ["Sheep", "Adult", "ADULT"] {
+            assert_eq!(parse_life_stage(Some(value)), Ok(Some(LifeStage::Adult)));
+        }
+    }
+
+    #[test]
+    fn blank_comment_becomes_none() {
+        let columns = find_animal_columns(&headers()).expect("valid headers");
+        let mut row = cells(&[ANIMAL_1]);
+        row.resize(headers().len(), String::new());
+        row[columns.comment] = "   ".to_owned();
+
+        assert_eq!(parse_animal_row(&row, &columns), Ok(empty_animal(ANIMAL_1)));
     }
 }
