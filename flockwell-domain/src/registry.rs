@@ -100,10 +100,18 @@ pub enum UpdateAnimalError {
 
 /// A collection with unique IDs, tags and UHF tags within its supplied scope.
 /// Disposed animals participate. Tag namespaces are independent.
+/// Missing tags are allowed, as are duplicate tip tags and visual UHF tags.
+/// UHF ownership is compared using the uppercase value stored by [`UhfTag`].
+///
+/// Loading audits all supplied animals before indexing. Public mutations preserve
+/// these uniqueness rules, and rejected commands leave the collection unchanged.
+/// Updates cannot change an animal's ID. No lambing/disposition existence checks,
+/// chronological checks, or 12-month tip-tag reuse checks are performed yet.
 ///
 /// Preview validation only describes the current state. Mutations always
 /// validate again. This in-memory collection cannot guarantee uniqueness
 /// against data elsewhere or replace atomic enforcement in persistent storage.
+/// It performs no I/O and does not save changes to Google Sheets.
 ///
 /// ```
 /// use flockwell_domain::{AnimalRegistry, AnimalData, CreateAnimal, UpdateAnimal, Change};

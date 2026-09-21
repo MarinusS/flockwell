@@ -45,7 +45,14 @@ pub enum LifeStage {
     Adult,
 }
 
-/// Individually valid animal data; collection uniqueness is checked separately.
+/// Typed animal data with checked UUIDv7 IDs and validated tag values.
+///
+/// Private fields prevent unrestricted mutation, but construction does not prove
+/// collection uniqueness or the existence of lambing/disposition records. Those
+/// IDs are references, not evidence that the referenced records exist. There are
+/// no chronological checks or derived life-stage rules yet; comments are
+/// unrestricted strings. Use [`crate::audit_animals`] to inspect duplicates and
+/// [`crate::AnimalRegistry`] to maintain collection uniqueness in memory.
 ///
 /// ```
 /// use flockwell_domain::{Animal, AnimalData};
@@ -70,7 +77,9 @@ pub struct Animal {
     data: AnimalData,
 }
 
-/// Typed values used to construct an animal. Does not assert uniqueness.
+/// Typed values used to construct an animal. Does not assert uniqueness or
+/// referential integrity. Optional tags may be absent; a present tag must pass
+/// its type's parser. The Sheets adapter, not this type, maps blank cells to `None`.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct AnimalData {
     pub tag: Option<Tag>,

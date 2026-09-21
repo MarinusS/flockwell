@@ -1,3 +1,10 @@
+//! Tag parsing trims surrounding whitespace and rejects blank values.
+//! Animal fields may still be absent (`None`); source adapters handle that case.
+//! Numeric tags preserve leading zeros. Other tags store `str::to_uppercase()`
+//! output, and equality, ordering, hashing, and display use that normalized text.
+//! These value types check format, not ownership. Collection uniqueness belongs
+//! to the audit and registry; tip tags and visual UHF tags need not be unique.
+
 use std::{fmt, str::FromStr};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
