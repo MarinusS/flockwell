@@ -249,8 +249,8 @@ impl AnimalRegistry {
 
     fn insert_validated(&mut self, animal: Animal) {
         for tag in unique_tags(animal.data()) {
-            self.tag_owners.insert(tag, animal.id());
+            self.tag_owners.insert(tag, animal.id().clone());
         }
-        self.animals.insert(animal.id(), animal);
+        self.animals.insert(animal.id().clone(), animal);
     }
 }

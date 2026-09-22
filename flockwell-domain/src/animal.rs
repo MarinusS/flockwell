@@ -193,12 +193,8 @@ impl Animal {
         Self { id, data }
     }
 
-    pub fn id(&self) -> AnimalId {
-        self.id
-    }
-
-    pub fn data(&self) -> &AnimalData {
-        &self.data
+    pub fn id(&self) -> &AnimalId {
+        &self.id
     }
 
     pub fn tag(&self) -> Option<&Tag> {
@@ -235,6 +231,10 @@ impl Animal {
 
     pub fn disposition_id(&self) -> Option<&DispositionId> {
         self.data.disposition_id.as_ref()
+    }
+
+    pub fn data(&self) -> &AnimalData {
+        &self.data
     }
 }
 

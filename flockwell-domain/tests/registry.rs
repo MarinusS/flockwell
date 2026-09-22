@@ -33,7 +33,7 @@ fn populated() -> AnimalRegistry {
 fn assert_audit_passes(registry: &AnimalRegistry) {
     let animals: Vec<_> = registry
         .iter()
-        .map(|a| Animal::from_data(a.id(), a.data().clone()))
+        .map(|a| Animal::from_data(a.id().clone(), a.data().clone()))
         .collect();
     assert!(!audit_animals(&animals).has_errors());
 }
@@ -69,8 +69,8 @@ fn empty_loading_and_creation_support_missing_tags() {
     assert_eq!(registry.create(command(1, None, None)), Ok(id(1)));
     assert_eq!(registry.len(), 2);
     assert_eq!(
-        registry.iter().map(Animal::id).collect::<Vec<_>>(),
-        [id(1), id(2)]
+        registry.iter().map(|animal| animal.id().clone()).collect::<Vec<_>>(),
+        [id(1).clone(), id(2).clone()]
     );
     assert_audit_passes(&registry);
 }

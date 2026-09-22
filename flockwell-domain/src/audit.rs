@@ -59,7 +59,7 @@ fn duplicates<K: Ord, I: IntoIterator<Item = K>>(
         for key in keys(animal) {
             groups.entry(key).or_default().push(RecordRef {
                 index,
-                animal_id: animal.id(),
+                animal_id: animal.id().clone(),
             });
         }
     }
@@ -80,9 +80,9 @@ fn duplicates<K: Ord, I: IntoIterator<Item = K>>(
 pub fn audit_animals(animals: &[Animal]) -> AuditReport {
     let mut issues = Vec::new();
     issues.extend(
-        duplicates(animals, |a| Some(a.id()))
+        duplicates(animals, |a| Some(a.id().clone()))
             .into_iter()
-            .map(|(id, records)| AuditIssue::DuplicateId { id, records }),
+            .map(|(id, records)| AuditIssue::DuplicateId { id: id.clone(), records }),
     );
     issues.extend(
         duplicates(animals, |a| unique_tags(a.data()))
@@ -135,15 +135,15 @@ mod tests {
         assert_eq!(
             report.issues(),
             &[AuditIssue::DuplicateId {
-                id: animals[0].id(),
+                id: animals[0].id().clone(),
                 records: vec![
                     RecordRef {
                         index: 0,
-                        animal_id: animals[0].id()
+                        animal_id: animals[0].id().clone()
                     },
                     RecordRef {
                         index: 1,
-                        animal_id: animals[1].id()
+                        animal_id: animals[1].id().clone()
                     }
                 ],
             }]
